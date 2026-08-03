@@ -1,0 +1,301 @@
+{
+  "version": "7.1",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "DEMANDA": ["DETALHES"],
+    "DETALHES": ["AGENDAMENTO"],
+    "AGENDAMENTO": ["RESUMO"],
+    "RESUMO": []
+  },
+  "screens": [
+    {
+      "id": "DEMANDA",
+      "title": "Como podemos ajudar?",
+      "data": {
+        "servicos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "consultoria", "title": "Consultoria" },
+            { "id": "instalacao", "title": "Instalação" }
+          ]
+        },
+        "nome_sugerido": {
+          "type": "string",
+          "__example__": "Maria"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Vamos entender sua necessidade"
+          },
+          {
+            "type": "TextBody",
+            "text": "São três telas rápidas. No fim você recebe o resumo aqui mesmo no WhatsApp."
+          },
+          {
+            "type": "Form",
+            "name": "form_demanda",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "nome",
+                "label": "Seu nome",
+                "input-type": "text",
+                "required": true,
+                "init-value": "${data.nome_sugerido}",
+                "helper-text": "Como você prefere ser chamado"
+              },
+              {
+                "type": "Dropdown",
+                "name": "tipo_servico",
+                "label": "Tipo de serviço",
+                "required": true,
+                "data-source": "${data.servicos}"
+              },
+              {
+                "type": "TextArea",
+                "name": "descricao",
+                "label": "Descreva sua demanda",
+                "required": true,
+                "max-length": 600,
+                "helper-text": "Quanto mais detalhe, mais preciso fica o orçamento"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "screen": "DEMANDA",
+                    "nome": "${form.nome}",
+                    "tipo_servico": "${form.tipo_servico}",
+                    "descricao": "${form.descricao}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DETALHES",
+      "title": "Prazo e orçamento",
+      "data": {
+        "urgencias": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          },
+          "__example__": [
+            {
+              "id": "imediata",
+              "title": "É urgente",
+              "description": "Preciso ser atendido em até 48h"
+            }
+          ]
+        },
+        "orcamentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{ "id": "ate_1k", "title": "Até R$ 1.000" }]
+        },
+        "canais": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{ "id": "whatsapp", "title": "WhatsApp" }]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form_detalhes",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "name": "urgencia",
+                "label": "Qual a urgência?",
+                "required": true,
+                "data-source": "${data.urgencias}"
+              },
+              {
+                "type": "Dropdown",
+                "name": "orcamento",
+                "label": "Faixa de investimento prevista",
+                "required": true,
+                "data-source": "${data.orcamentos}"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "canal_preferido",
+                "label": "Melhor canal para o retorno",
+                "required": true,
+                "data-source": "${data.canais}"
+              },
+              {
+                "type": "Footer",
+                "label": "Escolher horário",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "screen": "DETALHES",
+                    "urgencia": "${form.urgencia}",
+                    "orcamento": "${form.orcamento}",
+                    "canal_preferido": "${form.canal_preferido}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "AGENDAMENTO",
+      "title": "Melhor horário",
+      "data": {
+        "datas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{ "id": "2026-08-05", "title": "Qua, 05/08" }]
+        },
+        "horarios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "enabled": { "type": "boolean" }
+            }
+          },
+          "__example__": [
+            { "id": "09:00", "title": "09:00", "enabled": true },
+            { "id": "10:00", "title": "10:00", "enabled": false }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "Escolha quando prefere receber nosso contato."
+          },
+          {
+            "type": "Form",
+            "name": "form_agenda",
+            "children": [
+              {
+                "type": "Dropdown",
+                "name": "data_preferida",
+                "label": "Dia",
+                "required": true,
+                "data-source": "${data.datas}",
+                "on-select-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "screen": "AGENDAMENTO_SLOTS",
+                    "data_preferida": "${form.data_preferida}"
+                  }
+                }
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "horario_preferido",
+                "label": "Horário",
+                "required": true,
+                "data-source": "${data.horarios}"
+              },
+              {
+                "type": "Footer",
+                "label": "Enviar solicitação",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "screen": "AGENDAMENTO",
+                    "data_preferida": "${form.data_preferida}",
+                    "horario_preferido": "${form.horario_preferido}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "RESUMO",
+      "title": "Solicitação registrada",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "protocolo": { "type": "string", "__example__": "BIC-4F2A9C" },
+        "resumo": {
+          "type": "string",
+          "__example__": "Consultoria · urgente · 05/08 às 09:00"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "Recebemos sua demanda" },
+          {
+            "type": "TextBody",
+            "text": "Protocolo ${data.protocolo}"
+          },
+          { "type": "TextCaption", "text": "${data.resumo}" },
+          {
+            "type": "TextBody",
+            "text": "Nossa equipe confirma o atendimento por aqui. Se precisar antecipar algo, é só responder nesta conversa."
+          },
+          {
+            "type": "Footer",
+            "label": "Concluir",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "protocolo": "${data.protocolo}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
