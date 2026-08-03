@@ -72,9 +72,29 @@ export const env = {
   get verifyToken() {
     return required("WHATSAPP_VERIFY_TOKEN");
   },
-  /** Chave privada RSA (PEM) do endpoint de dados do Flow. */
+  /**
+   * Chave privada RSA (PEM) do endpoint de dados do Flow.
+   *
+   * Aceita três formatos, nessa ordem de tentativa:
+   *   1. PEM multi-linha, colado com quebras de linha reais.
+   *   2. PEM em uma linha, com "\n" literal no lugar das quebras.
+   *   3. O PEM inteiro codificado em base64, sem quebras.
+   *
+   * O formato 3 existe porque campos de texto (e IAs colando por engano)
+   * tendem a corromper quebras de linha e espaços ao colar um PEM. Base64
+   * não usa nenhum desses caracteres como parte do conteúdo, então é
+   * impossível um campo de texto "quebrar" o valor — na pior das hipóteses
+   * insere espaço em branco, que a gente remove antes de decodificar.
+   */
   get flowPrivateKey() {
-    return required("FLOW_PRIVATE_KEY").replace(/\\n/g, "\n");
+    const raw = required("FLOW_PRIVATE_KEY").trim();
+
+    if (raw.includes("BEGIN")) {
+      return raw.replace(/\\n/g, "\n");
+    }
+
+    const semEspacos = raw.replace(/\s+/g, "");
+    return Buffer.from(semEspacos, "base64").toString("utf-8");
   },
   /** Passphrase da chave privada, se ela tiver sido gerada com uma. */
   get flowPrivateKeyPassphrase() {
