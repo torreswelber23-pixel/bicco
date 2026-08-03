@@ -18,6 +18,43 @@ function optional(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
+/**
+ * Variáveis que cada rota precisa antes de conseguir responder qualquer coisa.
+ *
+ * Checar isso na entrada evita o pior modo de falha: o getter lançar no meio da
+ * expressão e o Next devolver 500 de corpo vazio, que não diz nada a quem está
+ * configurando na Meta.
+ *
+ * Só o mínimo indispensável entra aqui. O `ping` do health check, por exemplo,
+ * nunca toca no Supabase — exigir as chaves do banco reprovaria uma verificação
+ * que na prática funcionaria.
+ */
+export const REQUIRED_ENV = {
+  /** Decifrar e validar assinatura: todo POST do Flow passa por isso. */
+  flowEndpoint: ["WHATSAPP_APP_SECRET", "FLOW_PRIVATE_KEY"],
+  /** Handshake do webhook compara só o verify token. */
+  webhookVerify: ["WHATSAPP_VERIFY_TOKEN"],
+  /** Recebimento de mensagens: valida assinatura antes de qualquer coisa. */
+  webhookReceive: ["WHATSAPP_APP_SECRET"],
+  /** Tudo que o atendimento completo usa, para o diagnóstico do GET. */
+  todas: [
+    "WHATSAPP_TOKEN",
+    "WHATSAPP_PHONE_NUMBER_ID",
+    "WHATSAPP_APP_SECRET",
+    "WHATSAPP_VERIFY_TOKEN",
+    "FLOW_PRIVATE_KEY",
+    "WHATSAPP_FLOW_ID",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "ADMIN_PASSWORD",
+  ],
+} as const;
+
+/** Nomes das variáveis ausentes. Nunca devolve valores, só nomes. */
+export function missingEnv(names: readonly string[]): string[] {
+  return names.filter((name) => !process.env[name]);
+}
+
 export const env = {
   /** Token permanente do System User com permissão whatsapp_business_messaging. */
   get whatsappToken() {

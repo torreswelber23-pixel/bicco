@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { REQUIRED_ENV, env, missingEnv } from "@/lib/env";
 import {
   decryptRequest,
   encryptResponse,
@@ -18,6 +18,18 @@ export const dynamic = "force-dynamic";
  * navegação entre telas passa por aqui, cifrada ponta a ponta.
  */
 export async function POST(request: Request): Promise<Response> {
+  // Configuração incompleta é erro de operação, não do cliente: responda algo
+  // que dê para ler no relatório de verificação de integridade da Meta.
+  const faltando = missingEnv(REQUIRED_ENV.flowEndpoint);
+  if (faltando.length > 0) {
+    console.error("[flow] variáveis de ambiente ausentes:", faltando.join(", "));
+    return new Response(
+      `Configuração incompleta no servidor. Variáveis ausentes: ${faltando.join(", ")}. ` +
+        `Defina-as nas Environment Variables da Vercel e refaça o deploy.`,
+      { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   // A assinatura é sobre os bytes originais — leia o corpo como texto.
   const rawBody = await request.text();
 
@@ -90,7 +102,24 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-/** Facilita conferir de fora se a rota está no ar; não expõe nada sensível. */
+/**
+ * Diagnóstico de configuração, para abrir no navegador.
+ *
+ * Reporta apenas QUAIS variáveis estão definidas — nunca os valores. Os nomes
+ * já são públicos (estão no .env.example do repositório), então isso não revela
+ * nada; em compensação transforma "500 de corpo vazio" numa lista do que falta.
+ */
 export async function GET(): Promise<Response> {
-  return NextResponse.json({ status: "ok", endpoint: "whatsapp-flow" });
+  const ausentes = missingEnv(REQUIRED_ENV.todas);
+  const bloqueiaEndpoint = missingEnv(REQUIRED_ENV.flowEndpoint);
+
+  return NextResponse.json({
+    endpoint: "whatsapp-flow",
+    pronto_para_health_check: bloqueiaEndpoint.length === 0,
+    variaveis_ausentes: ausentes,
+    proximo_passo:
+      ausentes.length === 0
+        ? "Tudo configurado. Rode a verificação de integridade no Flow Builder."
+        : "Defina as variáveis acima na Vercel (Settings → Environment Variables) e refaça o deploy.",
+  });
 }

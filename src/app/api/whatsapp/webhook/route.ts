@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+import { REQUIRED_ENV, env, missingEnv } from "@/lib/env";
 import { isValidSignature } from "@/lib/signature";
 import { processWebhook, type WebhookPayload } from "@/lib/webhook-handler";
 
@@ -12,6 +12,15 @@ export const dynamic = "force-dynamic";
  * o hub.challenge de volta em texto puro.
  */
 export async function GET(request: Request): Promise<Response> {
+  const faltando = missingEnv(REQUIRED_ENV.webhookVerify);
+  if (faltando.length > 0) {
+    console.error("[webhook] variáveis ausentes:", faltando.join(", "));
+    return new Response(
+      `Configuração incompleta no servidor. Variáveis ausentes: ${faltando.join(", ")}.`,
+      { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   const params = new URL(request.url).searchParams;
 
   const mode = params.get("hub.mode");
@@ -29,6 +38,15 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const faltando = missingEnv(REQUIRED_ENV.webhookReceive);
+  if (faltando.length > 0) {
+    console.error("[webhook] variáveis ausentes:", faltando.join(", "));
+    return new Response(
+      `Configuração incompleta no servidor. Variáveis ausentes: ${faltando.join(", ")}.`,
+      { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   const rawBody = await request.text();
 
   if (
