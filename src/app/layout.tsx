@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bicco · Atendimento automatizado no WhatsApp",
+  title: "Bicco · Corrida e entrega sob demanda pelo WhatsApp",
   description:
-    "Captação de demanda via WhatsApp Flows: webhook, endpoint de dados e painel de leads.",
+    "Pedido de corrida ou entrega pelo WhatsApp: webhook, formulário web e painel de pedidos.",
 };
 
 export default function RootLayout({
