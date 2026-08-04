@@ -1,11 +1,14 @@
-# Bicco — atendimento automatizado no WhatsApp com Flows
+# Bicco — corrida e entrega sob demanda pelo WhatsApp
 
 Quem manda mensagem no seu número recebe automaticamente um **formulário nativo
-do WhatsApp** (WhatsApp Flow), responde três telas e vira uma **demanda
-estruturada** no banco, com protocolo e confirmação enviada de volta na conversa.
+do WhatsApp** (WhatsApp Flow) pra pedir uma **corrida** ou uma **entrega**. O
+pedido vira uma solicitação estruturada no banco e é oferecido, na hora, a
+todos os motoristas/entregadores cadastrados e disponíveis — o primeiro que
+tocar "Aceitar" fica com ele.
 
 Sem bot de menu numérico, sem "digite 1 para orçamento": o cliente preenche
-dentro do próprio WhatsApp, e você recebe os dados já normalizados.
+dentro do próprio WhatsApp, e o motorista aceita com um toque, também pelo
+WhatsApp.
 
 ```
 Cliente manda mensagem
@@ -14,16 +17,19 @@ Cliente manda mensagem
 /api/whatsapp/webhook ──── envia a mensagem interativa que abre o Flow
         │
         ▼
-Cliente preenche as telas no app
+Cliente escolhe Corrida ou Entrega e preenche endereços
         │
         ▼  (cada tela, cifrada ponta a ponta)
 /api/whatsapp/flow ──────── valida assinatura, decifra, decide a próxima tela
         │
         ▼
-Supabase (leads) + confirmação com protocolo de volta no WhatsApp
+Supabase (leads) grava o pedido + dispara "Aceitar/Recusar" pros motoristas
         │
         ▼
-/admin ─────────────────── painel com as demandas
+Motorista toca "Aceitar" ──── primeiro a tocar fica com o pedido
+        │
+        ▼
+Cliente recebe nome e contato do motorista; /admin mostra tudo em tempo real
 ```
 
 ## O que já está pronto
@@ -34,7 +40,8 @@ Supabase (leads) + confirmação com protocolo de volta no WhatsApp
 | Endpoint de dados do Flow (cripto) | `src/app/api/whatsapp/flow/route.ts` |
 | Criptografia RSA + AES-GCM | `src/lib/flow-crypto.ts` |
 | Regras de navegação entre telas | `src/lib/flow-handler.ts` |
-| Definição das telas | `flows/lead-capture.flow.json` |
+| Definição das telas | `flows/pedido-sob-demanda.flow.json` |
+| Despacho pros motoristas/entregadores | `src/lib/dispatch.ts` |
 | OAuth com a Meta | `src/app/api/auth/meta/` |
 | Renovação automática do token | `src/app/api/cron/refresh-token/route.ts` |
 | Esquema do banco | `supabase/migrations/` |
@@ -68,17 +75,37 @@ estiver conectada pelo painel.
 
 ## O Flow
 
-Quatro telas, definidas em `flows/lead-capture.flow.json`:
+Definido em `flows/pedido-sob-demanda.flow.json`:
 
-1. **DEMANDA** — nome, tipo de serviço, descrição livre.
-2. **DETALHES** — urgência, faixa de investimento, canal preferido de retorno.
-3. **AGENDAMENTO** — dia e horário. Os horários já reservados vêm marcados como
-   indisponíveis, consultando o banco em tempo real.
-4. **RESUMO** — protocolo e recapitulação.
+1. **SERVICO** — nome e escolha entre Corrida ou Entrega.
+2. **CORRIDA** — endereço de partida, de destino, e se é agora ou agendado.
+3. **ENTREGA** — endereço de coleta, de entrega, o que vai ser entregue, e
+   dados de quem recebe.
+4. **AGENDAMENTO** — só aparece quando o cliente escolhe "agendar para
+   depois". Os horários já reservados vêm marcados como indisponíveis.
+5. **RESUMO** — protocolo e recapitulação; o pedido já sai "buscando
+   motorista" assim que essa tela é exibida.
 
 As opções de cada tela vêm do servidor (`src/lib/catalog.ts`), não estão fixas no
 Flow JSON. Isso importa porque **um Flow publicado é imutável**: mudar uma opção
 de dropdown sem isso exigiria publicar uma nova versão.
+
+## Despacho para motoristas e entregadores
+
+Ao concluir o Flow (`finalizar()` em `src/lib/flow-handler.ts`), o pedido é
+oferecido a todos os motoristas/entregadores cadastrados, disponíveis e do
+tipo certo (`src/lib/dispatch.ts`): cada um recebe uma mensagem com botões
+"Aceitar" / "Recusar".
+
+- **O primeiro a aceitar fica com o pedido.** `claimOrder` (`src/lib/repository.ts`)
+  faz a atribuição com um `UPDATE ... WHERE status = 'buscando_motorista'`: só a
+  primeira resposta encontra a linha nesse estado, então dois toques quase
+  simultâneos não geram dois motoristas para o mesmo pedido.
+- **Motoristas são cadastrados no `/admin`**, com nome, telefone (o mesmo
+  número do WhatsApp) e tipo (corrida, entrega ou ambos). Só entram no
+  despacho os marcados como disponíveis.
+- **Aceitar dispara um botão de "Concluir".** Quando o motorista toca, o
+  pedido vira `concluido` e o cliente recebe um aviso.
 
 ## Como estudar sem depender da Meta
 

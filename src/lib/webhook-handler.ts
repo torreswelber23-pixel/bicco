@@ -1,16 +1,22 @@
-import { protocoloDe, resumoDe } from "./flow-handler";
+import { resumoPedido } from "./dispatch";
+import { protocoloDe } from "./flow-handler";
 import {
+  claimOrder,
+  completeOrder,
+  findDriverByPhone,
   openFlowSession,
   recordMessage,
   upsertContact,
 } from "./repository";
-import { markAsRead, newFlowToken, sendFlow, sendText } from "./whatsapp";
+import { markAsRead, newFlowToken, sendButtons, sendFlow, sendText } from "./whatsapp";
 
 /**
  * Tradução do payload do webhook para ações de atendimento.
  *
- * Regra geral: qualquer mensagem de texto de quem ainda não tem uma demanda
- * aberta recebe o Flow; a resposta do Flow (nfm_reply) recebe a confirmação.
+ * Três caminhos, pela forma da mensagem:
+ *  - texto solto de quem não é motorista → abre o Flow de novo pedido;
+ *  - nfm_reply (Flow concluído) → confirmação pro cliente;
+ *  - button_reply de um motorista cadastrado → aceitar/recusar/concluir.
  */
 
 interface WebhookMessage {
@@ -21,6 +27,7 @@ interface WebhookMessage {
   interactive?: {
     type: string;
     nfm_reply?: { response_json?: string; name?: string; body?: string };
+    button_reply?: { id: string; title: string };
   };
 }
 
@@ -60,6 +67,17 @@ async function processMessage(
   message: WebhookMessage,
   profileName?: string,
 ): Promise<void> {
+  await markAsRead(message.id).catch(() => {
+    /* marcar como lida é cosmético */
+  });
+
+  // Resposta de motorista aos botões de Aceitar/Recusar/Concluir: não passa
+  // pelo cadastro de contato de cliente, é tratada à parte.
+  if (message.type === "interactive" && message.interactive?.button_reply) {
+    await processarRespostaMotorista(message);
+    return;
+  }
+
   const contact = await upsertContact(message.from, profileName);
 
   await recordMessage({
@@ -68,10 +86,6 @@ async function processMessage(
     direction: "inbound",
     type: message.type,
     payload: message,
-  });
-
-  await markAsRead(message.id).catch(() => {
-    /* marcar como lida é cosmético */
   });
 
   // Resposta final do Flow: chega como interactive/nfm_reply.
@@ -96,13 +110,13 @@ async function abrirFlow(
   await sendFlow({
     to,
     flowToken,
-    initialScreen: "DEMANDA",
-    header: "Atendimento",
+    initialScreen: "SERVICO",
+    header: "Pedir corrida ou entrega",
     body:
-      `${saudacao} Para te atender com precisão, toque no botão abaixo e ` +
-      `responda três telas rápidas sobre o que você precisa.`,
-    footer: "Leva menos de um minuto",
-    cta: "Descrever demanda",
+      `${saudacao} Toque no botão abaixo pra pedir uma corrida ou uma entrega. ` +
+      `Leva menos de um minuto.`,
+    footer: "Corrida ou entrega",
+    cta: "Fazer pedido",
   });
 
   await recordMessage({
@@ -122,22 +136,80 @@ async function confirmarRecebimento(message: WebhookMessage): Promise<void> {
     try {
       const parsed = JSON.parse(responseJson) as Record<string, unknown>;
       protocolo = String(parsed.protocolo ?? "");
-      resumo = resumoDe(parsed);
+      resumo = String(parsed.resumo ?? "");
     } catch (error) {
       console.error("[webhook] response_json inválido:", error);
     }
   }
 
   const linhas = [
-    "Perfeito, sua solicitação está registrada. ✅",
+    "Pedido registrado! ✅",
     protocolo ? `Protocolo: *${protocolo}*` : "",
-    resumo ? `Resumo: ${resumo}` : "",
+    resumo ? resumo : "",
     "",
-    "Nossa equipe entra em contato no horário escolhido. Se precisar ajustar algo, é só responder por aqui.",
+    "Estamos buscando um motorista disponível. Assim que alguém aceitar, avisamos por aqui.",
   ];
 
   await sendText(message.from, linhas.filter(Boolean).join("\n"));
 }
 
-// Reexportado para uso em scripts de teste.
-export { protocoloDe };
+async function processarRespostaMotorista(message: WebhookMessage): Promise<void> {
+  const buttonId = message.interactive?.button_reply?.id ?? "";
+  const [acao, orderId] = buttonId.split(":");
+  if (!orderId) return;
+
+  const motorista = await findDriverByPhone(message.from);
+  if (!motorista) {
+    console.error(
+      "[webhook] resposta de botão de número não cadastrado como motorista:",
+      message.from,
+    );
+    return;
+  }
+
+  if (acao === "aceitar") {
+    const order = await claimOrder(orderId, motorista.id);
+
+    if (!order) {
+      await sendText(
+        message.from,
+        "Esse pedido já foi atendido por outro motorista. Obrigado por responder!",
+      );
+      return;
+    }
+
+    await sendButtons(
+      message.from,
+      `Você aceitou! Protocolo ${protocoloDe(order.id)}\n\n${resumoPedido(order)}`,
+      [{ id: `concluir:${order.id}`, title: "Marcar concluído" }],
+    );
+
+    const clienteWaId = order.contacts?.wa_id;
+    if (clienteWaId) {
+      await sendText(
+        clienteWaId,
+        `Seu pedido foi aceito! ✅\nMotorista: ${motorista.nome}\nContato: ${motorista.telefone}`,
+      );
+    }
+    return;
+  }
+
+  if (acao === "concluir") {
+    const order = await completeOrder(orderId, motorista.id);
+
+    if (!order) {
+      await sendText(message.from, "Não encontrei esse pedido em aberto pra você.");
+      return;
+    }
+
+    await sendText(message.from, "Marcado como concluído. Obrigado!");
+
+    const clienteWaId = order.contacts?.wa_id;
+    if (clienteWaId) {
+      await sendText(clienteWaId, "Serviço concluído. Obrigado por usar o bicco!");
+    }
+    return;
+  }
+
+  // "recusar": só reconhece, não muda o pedido — outro motorista ainda pode aceitar.
+}

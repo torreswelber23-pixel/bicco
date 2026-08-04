@@ -164,7 +164,7 @@ npm run flow:publish -- --publish
 ```
 
 O passo 2 retorna `validation_errors`. Se a lista não estiver vazia, corrija
-`flows/lead-capture.flow.json` e rode de novo — a publicação só passa com a lista
+`flows/pedido-sob-demanda.flow.json` e rode de novo — a publicação só passa com a lista
 vazia.
 
 Antes de publicar, dá para testar pelo **Flow Builder** (WhatsApp Manager →

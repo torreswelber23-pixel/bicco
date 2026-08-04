@@ -6,8 +6,9 @@
  * assina o corpo com o app secret, chama o endpoint e decifra a resposta.
  *
  *   node scripts/simulate-flow.mjs ping
- *   node scripts/simulate-flow.mjs init  <flow_token>
- *   node scripts/simulate-flow.mjs demanda <flow_token>
+ *   node scripts/simulate-flow.mjs init    <flow_token>
+ *   node scripts/simulate-flow.mjs servico <flow_token>
+ *   node scripts/simulate-flow.mjs corrida <flow_token>
  *
  * Use um flow_token que exista em flow_sessions (o INIT falha sem sessão).
  */
@@ -34,16 +35,27 @@ const bodies = {
     action: "INIT",
     flow_token: flowToken,
   },
-  demanda: {
+  servico: {
     version: "3.0",
     action: "data_exchange",
-    screen: "DEMANDA",
+    screen: "SERVICO",
     flow_token: flowToken,
     data: {
-      screen: "DEMANDA",
+      screen: "SERVICO",
       nome: "Cliente de Teste",
-      tipo_servico: "consultoria",
-      descricao: "Preciso de um diagnóstico do meu processo de atendimento.",
+      tipo_servico: "corrida",
+    },
+  },
+  corrida: {
+    version: "3.0",
+    action: "data_exchange",
+    screen: "CORRIDA",
+    flow_token: flowToken,
+    data: {
+      screen: "CORRIDA",
+      origem: "Rua A, 100",
+      destino: "Rua B, 200",
+      quando: "agora",
     },
   },
 };

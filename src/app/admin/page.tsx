@@ -1,10 +1,16 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ADMIN_COOKIE, isAdmin, sessionValue } from "@/lib/admin-auth";
+import { SERVICOS, labelOf } from "@/lib/catalog";
 import { env } from "@/lib/env";
-import { CANAIS, ORCAMENTOS, SERVICOS, URGENCIAS, labelOf } from "@/lib/catalog";
 import { descobrirNumeros } from "@/lib/meta-oauth";
-import { listLeads } from "@/lib/repository";
+import {
+  createDriver,
+  listDrivers,
+  listOrders,
+  setDriverDisponivel,
+  type Driver,
+} from "@/lib/repository";
 import {
   SETTINGS_KEYS,
   deleteSetting,
@@ -22,6 +28,21 @@ import {
 } from "@/lib/whatsapp-config";
 
 export const dynamic = "force-dynamic";
+
+const STATUS_LABEL: Record<string, string> = {
+  pendente: "Pendente",
+  buscando_motorista: "Buscando motorista",
+  atribuido: "Atribuído",
+  a_caminho: "A caminho",
+  concluido: "Concluído",
+  cancelado: "Cancelado",
+};
+
+const TIPO_MOTORISTA: Record<Driver["tipo"], string> = {
+  corrida: "Corrida",
+  entrega: "Entrega",
+  ambos: "Corrida e entrega",
+};
 
 async function login(formData: FormData): Promise<void> {
   "use server";
@@ -132,6 +153,46 @@ async function escolherNumero(formData: FormData): Promise<void> {
   revalidatePath("/admin");
 }
 
+async function adicionarMotorista(formData: FormData): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const telefone = String(formData.get("telefone") ?? "").replace(/\D/g, "");
+  const tipo = String(formData.get("tipo") ?? "");
+
+  if (!nome || !telefone || !["corrida", "entrega", "ambos"].includes(tipo)) {
+    return;
+  }
+
+  try {
+    await createDriver({ nome, telefone, tipo: tipo as Driver["tipo"] });
+  } catch (erro) {
+    console.error("[admin] falha ao cadastrar motorista:", erro);
+  }
+
+  revalidatePath("/admin");
+}
+
+async function alternarDisponibilidade(formData: FormData): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  const driverId = String(formData.get("driverId") ?? "");
+  const disponivelAtual = formData.get("disponivelAtual") === "true";
+  if (!driverId) return;
+
+  try {
+    await setDriverDisponivel(driverId, !disponivelAtual);
+  } catch (erro) {
+    console.error("[admin] falha ao atualizar motorista:", erro);
+  }
+
+  revalidatePath("/admin");
+}
+
 export default async function Admin({
   searchParams,
 }: {
@@ -140,7 +201,7 @@ export default async function Admin({
   if (!(await isAdmin())) {
     return (
       <main>
-        <h1>Painel de demandas</h1>
+        <h1>Painel de pedidos</h1>
         <p className="sub">Acesso restrito.</p>
         <form className="login" action={login}>
           <input
@@ -157,10 +218,11 @@ export default async function Admin({
   }
 
   const params = await searchParams;
-  const [credenciais, metadata, leads, pendente] = await Promise.all([
+  const [credenciais, metadata, pedidos, motoristas, pendente] = await Promise.all([
     loadWhatsAppConfig(),
     loadTokenMetadata(),
-    listLeads(),
+    listOrders(),
+    listDrivers(),
     readSetting<PendingConnection>(SETTINGS_KEYS.pendingConnection),
   ]);
 
@@ -287,16 +349,87 @@ export default async function Admin({
         </div>
       )}
 
-      <h2>Demandas captadas</h2>
+      <h2>Motoristas e entregadores</h2>
       <p className="sub">
-        {leads.length === 0
-          ? "Nenhuma demanda ainda."
-          : `${leads.length} registro(s), mais recentes primeiro.`}
+        Só quem está marcado como disponível recebe os pedidos novos.
       </p>
 
-      {leads.length === 0 ? (
+      <div className="card">
+        <form action={adicionarMotorista} className="acoes" style={{ marginTop: 0 }}>
+          <input type="text" name="nome" placeholder="Nome" required style={{ flex: 1 }} />
+          <input
+            type="tel"
+            name="telefone"
+            placeholder="Telefone (com DDD)"
+            required
+            style={{ flex: 1 }}
+          />
+          <select name="tipo" defaultValue="ambos">
+            <option value="corrida">Corrida</option>
+            <option value="entrega">Entrega</option>
+            <option value="ambos">Corrida e entrega</option>
+          </select>
+          <button type="submit">Cadastrar</button>
+        </form>
+      </div>
+
+      {motoristas.length === 0 ? (
+        <div className="card empty">Nenhum motorista cadastrado ainda.</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Telefone</th>
+                <th>Atende</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {motoristas.map((motorista) => (
+                <tr key={motorista.id}>
+                  <td>{motorista.nome}</td>
+                  <td>{motorista.telefone}</td>
+                  <td>{TIPO_MOTORISTA[motorista.tipo]}</td>
+                  <td>
+                    <span
+                      className={motorista.disponivel ? "badge urgente" : "badge"}
+                    >
+                      {motorista.disponivel ? "Disponível" : "Indisponível"}
+                    </span>
+                  </td>
+                  <td>
+                    <form action={alternarDisponibilidade}>
+                      <input type="hidden" name="driverId" value={motorista.id} />
+                      <input
+                        type="hidden"
+                        name="disponivelAtual"
+                        value={String(motorista.disponivel)}
+                      />
+                      <button type="submit" className="botao secundario">
+                        {motorista.disponivel ? "Marcar indisponível" : "Marcar disponível"}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h2>Pedidos</h2>
+      <p className="sub">
+        {pedidos.length === 0
+          ? "Nenhum pedido ainda."
+          : `${pedidos.length} registro(s), mais recentes primeiro.`}
+      </p>
+
+      {pedidos.length === 0 ? (
         <div className="card empty">
-          Assim que alguém concluir o Flow, a demanda aparece aqui.
+          Assim que alguém pedir uma corrida ou entrega, aparece aqui.
         </div>
       ) : (
         <div className="table-wrap">
@@ -304,42 +437,60 @@ export default async function Admin({
             <thead>
               <tr>
                 <th>Recebido</th>
-                <th>Contato</th>
-                <th>Serviço</th>
-                <th>Demanda</th>
-                <th>Urgência</th>
-                <th>Orçamento</th>
-                <th>Agenda</th>
-                <th>Retorno por</th>
+                <th>Cliente</th>
+                <th>Tipo</th>
+                <th>Detalhes</th>
+                <th>Quando</th>
+                <th>Status</th>
+                <th>Motorista</th>
               </tr>
             </thead>
             <tbody>
-              {leads.map((lead) => (
-                <tr key={lead.id}>
-                  <td>{formatarData(lead.created_at)}</td>
+              {pedidos.map((pedido) => (
+                <tr key={pedido.id}>
+                  <td>{formatarData(pedido.created_at)}</td>
                   <td>
-                    {lead.nome ?? lead.contacts?.profile_name ?? "—"}
+                    {pedido.nome ?? pedido.contacts?.profile_name ?? "—"}
                     <br />
-                    <span className="badge">{lead.contacts?.wa_id ?? "—"}</span>
+                    <span className="badge">{pedido.contacts?.wa_id ?? "—"}</span>
                   </td>
-                  <td>{labelOf(SERVICOS, lead.tipo_servico ?? undefined)}</td>
-                  <td style={{ maxWidth: "22rem" }}>{lead.descricao ?? "—"}</td>
+                  <td>{labelOf(SERVICOS, pedido.tipo_servico ?? undefined)}</td>
+                  <td style={{ maxWidth: "22rem" }}>
+                    {pedido.tipo_servico === "corrida" ? (
+                      <>
+                        De: {pedido.origem ?? "—"}
+                        <br />
+                        Para: {pedido.destino ?? "—"}
+                      </>
+                    ) : (
+                      <>
+                        Coleta: {pedido.endereco_coleta ?? "—"}
+                        <br />
+                        Entrega: {pedido.endereco_entrega ?? "—"}
+                        {pedido.item_descricao ? (
+                          <>
+                            <br />
+                            Item: {pedido.item_descricao}
+                          </>
+                        ) : null}
+                      </>
+                    )}
+                  </td>
+                  <td>
+                    {pedido.quando === "agendado" && pedido.data_preferida
+                      ? `${formatarDia(pedido.data_preferida)} ${pedido.horario_preferido ?? ""}`
+                      : "Agora"}
+                  </td>
                   <td>
                     <span
                       className={
-                        lead.urgencia === "imediata" ? "badge urgente" : "badge"
+                        pedido.status === "concluido" ? "badge urgente" : "badge"
                       }
                     >
-                      {labelOf(URGENCIAS, lead.urgencia ?? undefined)}
+                      {STATUS_LABEL[pedido.status] ?? pedido.status}
                     </span>
                   </td>
-                  <td>{labelOf(ORCAMENTOS, lead.orcamento ?? undefined)}</td>
-                  <td>
-                    {lead.data_preferida
-                      ? `${formatarDia(lead.data_preferida)} ${lead.horario_preferido ?? ""}`
-                      : "—"}
-                  </td>
-                  <td>{labelOf(CANAIS, lead.canal_preferido ?? undefined)}</td>
+                  <td>{pedido.drivers?.nome ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

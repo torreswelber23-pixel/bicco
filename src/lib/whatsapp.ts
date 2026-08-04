@@ -71,6 +71,43 @@ export function newFlowToken(): string {
   return crypto.randomUUID();
 }
 
+export interface BotaoInterativo {
+  /** Vai e volta em interactive.button_reply.id — carrega a ação e o pedido. */
+  id: string;
+  /** Máximo de 20 caracteres, limite da Meta para o texto do botão. */
+  title: string;
+}
+
+/**
+ * Mensagem com até 3 botões de resposta rápida.
+ *
+ * É o que dispara para os motoristas ("Aceitar" / "Recusar") e para
+ * confirmar a conclusão de um pedido — mais leve que abrir outro Flow para
+ * uma decisão binária.
+ */
+export async function sendButtons(
+  to: string,
+  body: string,
+  buttons: BotaoInterativo[],
+): Promise<void> {
+  await callGraph((id) => `${id}/messages`, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: body },
+      action: {
+        buttons: buttons.map((botao) => ({
+          type: "reply",
+          reply: { id: botao.id, title: botao.title },
+        })),
+      },
+    },
+  });
+}
+
 export interface SendFlowOptions {
   to: string;
   flowToken: string;
@@ -112,7 +149,7 @@ export async function sendFlow(options: SendFlowOptions): Promise<void> {
           mode: process.env.FLOW_MODE === "draft" ? "draft" : "published",
           flow_action: "navigate",
           flow_action_payload: {
-            screen: options.initialScreen ?? "DEMANDA",
+            screen: options.initialScreen ?? "SERVICO",
           },
         },
       },

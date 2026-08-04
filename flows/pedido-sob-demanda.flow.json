@@ -2,15 +2,16 @@
   "version": "7.1",
   "data_api_version": "3.0",
   "routing_model": {
-    "DEMANDA": ["DETALHES"],
-    "DETALHES": ["AGENDAMENTO"],
+    "SERVICO": ["CORRIDA", "ENTREGA"],
+    "CORRIDA": ["AGENDAMENTO", "RESUMO"],
+    "ENTREGA": ["AGENDAMENTO", "RESUMO"],
     "AGENDAMENTO": ["RESUMO"],
     "RESUMO": []
   },
   "screens": [
     {
-      "id": "DEMANDA",
-      "title": "Como podemos ajudar?",
+      "id": "SERVICO",
+      "title": "O que você precisa?",
       "data": {
         "servicos": {
           "type": "array",
@@ -18,12 +19,13 @@
             "type": "object",
             "properties": {
               "id": { "type": "string" },
-              "title": { "type": "string" }
+              "title": { "type": "string" },
+              "description": { "type": "string" }
             }
           },
           "__example__": [
-            { "id": "consultoria", "title": "Consultoria" },
-            { "id": "instalacao", "title": "Instalação" }
+            { "id": "corrida", "title": "Corrida", "description": "Pedir uma corrida" },
+            { "id": "entrega", "title": "Entrega", "description": "Buscar e entregar algo" }
           ]
         },
         "nome_sugerido": {
@@ -36,15 +38,11 @@
         "children": [
           {
             "type": "TextHeading",
-            "text": "Vamos entender sua necessidade"
-          },
-          {
-            "type": "TextBody",
-            "text": "São três telas rápidas. No fim você recebe o resumo aqui mesmo no WhatsApp."
+            "text": "Pedir corrida ou entrega"
           },
           {
             "type": "Form",
-            "name": "form_demanda",
+            "name": "form_servico",
             "children": [
               {
                 "type": "TextInput",
@@ -52,23 +50,14 @@
                 "label": "Seu nome",
                 "input-type": "text",
                 "required": true,
-                "init-value": "${data.nome_sugerido}",
-                "helper-text": "Como você prefere ser chamado"
+                "init-value": "${data.nome_sugerido}"
               },
               {
-                "type": "Dropdown",
+                "type": "RadioButtonsGroup",
                 "name": "tipo_servico",
-                "label": "Tipo de serviço",
+                "label": "Tipo de pedido",
                 "required": true,
                 "data-source": "${data.servicos}"
-              },
-              {
-                "type": "TextArea",
-                "name": "descricao",
-                "label": "Descreva sua demanda",
-                "required": true,
-                "max-length": 600,
-                "helper-text": "Quanto mais detalhe, mais preciso fica o orçamento"
               },
               {
                 "type": "Footer",
@@ -76,10 +65,9 @@
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
-                    "screen": "DEMANDA",
+                    "screen": "SERVICO",
                     "nome": "${form.nome}",
-                    "tipo_servico": "${form.tipo_servico}",
-                    "descricao": "${form.descricao}"
+                    "tipo_servico": "${form.tipo_servico}"
                   }
                 }
               }
@@ -89,28 +77,10 @@
       }
     },
     {
-      "id": "DETALHES",
-      "title": "Prazo e orçamento",
+      "id": "CORRIDA",
+      "title": "Detalhes da corrida",
       "data": {
-        "urgencias": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "description": { "type": "string" }
-            }
-          },
-          "__example__": [
-            {
-              "id": "imediata",
-              "title": "É urgente",
-              "description": "Preciso ser atendido em até 48h"
-            }
-          ]
-        },
-        "orcamentos": {
+        "quandos": {
           "type": "array",
           "items": {
             "type": "object",
@@ -119,18 +89,7 @@
               "title": { "type": "string" }
             }
           },
-          "__example__": [{ "id": "ate_1k", "title": "Até R$ 1.000" }]
-        },
-        "canais": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" }
-            }
-          },
-          "__example__": [{ "id": "whatsapp", "title": "WhatsApp" }]
+          "__example__": [{ "id": "agora", "title": "Agora" }]
         }
       },
       "layout": {
@@ -138,39 +97,125 @@
         "children": [
           {
             "type": "Form",
-            "name": "form_detalhes",
+            "name": "form_corrida",
             "children": [
               {
-                "type": "RadioButtonsGroup",
-                "name": "urgencia",
-                "label": "Qual a urgência?",
-                "required": true,
-                "data-source": "${data.urgencias}"
+                "type": "TextInput",
+                "name": "origem",
+                "label": "Endereço de partida",
+                "input-type": "text",
+                "required": true
               },
               {
-                "type": "Dropdown",
-                "name": "orcamento",
-                "label": "Faixa de investimento prevista",
-                "required": true,
-                "data-source": "${data.orcamentos}"
+                "type": "TextInput",
+                "name": "destino",
+                "label": "Endereço de destino",
+                "input-type": "text",
+                "required": true
               },
               {
                 "type": "RadioButtonsGroup",
-                "name": "canal_preferido",
-                "label": "Melhor canal para o retorno",
+                "name": "quando",
+                "label": "Quando?",
                 "required": true,
-                "data-source": "${data.canais}"
+                "data-source": "${data.quandos}"
               },
               {
                 "type": "Footer",
-                "label": "Escolher horário",
+                "label": "Continuar",
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
-                    "screen": "DETALHES",
-                    "urgencia": "${form.urgencia}",
-                    "orcamento": "${form.orcamento}",
-                    "canal_preferido": "${form.canal_preferido}"
+                    "screen": "CORRIDA",
+                    "origem": "${form.origem}",
+                    "destino": "${form.destino}",
+                    "quando": "${form.quando}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "ENTREGA",
+      "title": "Detalhes da entrega",
+      "data": {
+        "quandos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{ "id": "agora", "title": "Agora" }]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form_entrega",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "endereco_coleta",
+                "label": "Endereço de coleta",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "endereco_entrega",
+                "label": "Endereço de entrega",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextArea",
+                "name": "item_descricao",
+                "label": "O que vai ser entregue?",
+                "required": true,
+                "max-length": 300
+              },
+              {
+                "type": "TextInput",
+                "name": "destinatario_nome",
+                "label": "Nome de quem vai receber",
+                "input-type": "text",
+                "required": false
+              },
+              {
+                "type": "TextInput",
+                "name": "destinatario_telefone",
+                "label": "Telefone de quem vai receber",
+                "input-type": "phone",
+                "required": false
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "quando",
+                "label": "Quando?",
+                "required": true,
+                "data-source": "${data.quandos}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "screen": "ENTREGA",
+                    "endereco_coleta": "${form.endereco_coleta}",
+                    "endereco_entrega": "${form.endereco_entrega}",
+                    "item_descricao": "${form.item_descricao}",
+                    "destinatario_nome": "${form.destinatario_nome}",
+                    "destinatario_telefone": "${form.destinatario_telefone}",
+                    "quando": "${form.quando}"
                   }
                 }
               }
@@ -215,7 +260,7 @@
         "children": [
           {
             "type": "TextBody",
-            "text": "Escolha quando prefere receber nosso contato."
+            "text": "Escolha quando prefere ser atendido."
           },
           {
             "type": "Form",
@@ -244,7 +289,7 @@
               },
               {
                 "type": "Footer",
-                "label": "Enviar solicitação",
+                "label": "Enviar pedido",
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
@@ -261,20 +306,20 @@
     },
     {
       "id": "RESUMO",
-      "title": "Solicitação registrada",
+      "title": "Pedido registrado",
       "terminal": true,
       "success": true,
       "data": {
         "protocolo": { "type": "string", "__example__": "BIC-4F2A9C" },
         "resumo": {
           "type": "string",
-          "__example__": "Consultoria · urgente · 05/08 às 09:00"
+          "__example__": "De: Rua A, 100\nPara: Rua B, 200"
         }
       },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
-          { "type": "TextHeading", "text": "Recebemos sua demanda" },
+          { "type": "TextHeading", "text": "Buscando alguém pra te atender" },
           {
             "type": "TextBody",
             "text": "Protocolo ${data.protocolo}"
@@ -282,7 +327,7 @@
           { "type": "TextCaption", "text": "${data.resumo}" },
           {
             "type": "TextBody",
-            "text": "Nossa equipe confirma o atendimento por aqui. Se precisar antecipar algo, é só responder nesta conversa."
+            "text": "Assim que um motorista ou entregador aceitar, avisamos por aqui."
           },
           {
             "type": "Footer",
@@ -290,7 +335,8 @@
             "on-click-action": {
               "name": "complete",
               "payload": {
-                "protocolo": "${data.protocolo}"
+                "protocolo": "${data.protocolo}",
+                "resumo": "${data.resumo}"
               }
             }
           }

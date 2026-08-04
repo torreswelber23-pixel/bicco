@@ -1,19 +1,13 @@
 import type { FlowRequestBody } from "./flow-crypto";
-import {
-  CANAIS,
-  ORCAMENTOS,
-  SERVICOS,
-  URGENCIAS,
-  horariosDisponiveis,
-  labelOf,
-  proximasDatas,
-} from "./catalog";
+import { QUANDO, SERVICOS, horariosDisponiveis, proximasDatas } from "./catalog";
+import { despacharPedido, resumoPedido } from "./dispatch";
 import {
   bookedSlots,
   closeFlowSession,
-  createLead,
+  createOrder,
   findFlowSession,
   mergeFlowDraft,
+  type Order,
 } from "./repository";
 import { supabase } from "./supabase";
 
@@ -23,6 +17,10 @@ import { supabase } from "./supabase";
  * Contrato: para cada requisição devolvemos a PRÓXIMA tela e os dados dela.
  * O cliente não guarda estado entre telas, então o rascunho vive em
  * flow_sessions.draft e o flow_token é a única credencial que temos.
+ *
+ * Navegação: SERVICO decide entre CORRIDA e ENTREGA; as duas levam a
+ * AGENDAMENTO só quando o cliente escolhe "agendado" — se for "agora", pula
+ * direto para o RESUMO e o pedido já sai buscando motorista.
  */
 
 export interface FlowResponse {
@@ -59,32 +57,47 @@ export async function handleFlowRequest(
   if (!session) throw new UnknownFlowTokenError();
 
   if (request.action === "INIT") {
-    return telaDemanda(session.contact_id);
+    return telaServico(session.contact_id);
   }
 
   if (request.action === "BACK") {
-    return voltarPara(request.screen, session.contact_id);
+    return voltarPara(request.screen, session.contact_id, session.draft);
   }
 
   const origem = String(request.data?.screen ?? request.screen ?? "");
 
   switch (origem) {
-    case "DEMANDA": {
-      await mergeFlowDraft(flowToken, {
+    case "SERVICO": {
+      const draft = await mergeFlowDraft(flowToken, {
         nome: request.data?.nome,
         tipo_servico: request.data?.tipo_servico,
-        descricao: request.data?.descricao,
       });
-      return telaDetalhes();
+      return draft.tipo_servico === "entrega" ? telaEntrega() : telaCorrida();
     }
 
-    case "DETALHES": {
-      await mergeFlowDraft(flowToken, {
-        urgencia: request.data?.urgencia,
-        orcamento: request.data?.orcamento,
-        canal_preferido: request.data?.canal_preferido,
+    case "CORRIDA": {
+      const draft = await mergeFlowDraft(flowToken, {
+        origem: request.data?.origem,
+        destino: request.data?.destino,
+        quando: request.data?.quando,
       });
-      return telaAgendamento();
+      return draft.quando === "agendado"
+        ? telaAgendamento()
+        : finalizar(flowToken, session.contact_id, draft);
+    }
+
+    case "ENTREGA": {
+      const draft = await mergeFlowDraft(flowToken, {
+        endereco_coleta: request.data?.endereco_coleta,
+        endereco_entrega: request.data?.endereco_entrega,
+        item_descricao: request.data?.item_descricao,
+        destinatario_nome: request.data?.destinatario_nome,
+        destinatario_telefone: request.data?.destinatario_telefone,
+        quando: request.data?.quando,
+      });
+      return draft.quando === "agendado"
+        ? telaAgendamento()
+        : finalizar(flowToken, session.contact_id, draft);
     }
 
     // Disparado pelo on-select-action do seletor de data: recarrega apenas os
@@ -107,7 +120,7 @@ export async function handleFlowRequest(
   }
 }
 
-async function telaDemanda(contactId: string): Promise<FlowResponse> {
+async function telaServico(contactId: string): Promise<FlowResponse> {
   const { data } = await supabase()
     .from("contacts")
     .select("profile_name")
@@ -115,7 +128,7 @@ async function telaDemanda(contactId: string): Promise<FlowResponse> {
     .maybeSingle();
 
   return {
-    screen: "DEMANDA",
+    screen: "SERVICO",
     data: {
       servicos: SERVICOS,
       nome_sugerido: (data as { profile_name?: string } | null)?.profile_name ?? "",
@@ -123,14 +136,17 @@ async function telaDemanda(contactId: string): Promise<FlowResponse> {
   };
 }
 
-function telaDetalhes(): FlowResponse {
+function telaCorrida(): FlowResponse {
   return {
-    screen: "DETALHES",
-    data: {
-      urgencias: URGENCIAS,
-      orcamentos: ORCAMENTOS,
-      canais: CANAIS,
-    },
+    screen: "CORRIDA",
+    data: { quandos: QUANDO },
+  };
+}
+
+function telaEntrega(): FlowResponse {
+  return {
+    screen: "ENTREGA",
+    data: { quandos: QUANDO },
   };
 }
 
@@ -153,15 +169,24 @@ async function finalizar(
   contactId: string,
   draft: Record<string, unknown>,
 ): Promise<FlowResponse> {
-  const leadId = await createLead({
+  const tipoServico = asText(draft.tipo_servico);
+  if (tipoServico !== "corrida" && tipoServico !== "entrega") {
+    throw new Error(`tipo_servico inválido no rascunho: "${tipoServico}"`);
+  }
+
+  const orderId = await createOrder({
     contactId,
     flowToken,
     nome: asText(draft.nome),
-    tipoServico: asText(draft.tipo_servico),
-    descricao: asText(draft.descricao),
-    urgencia: asText(draft.urgencia),
-    orcamento: asText(draft.orcamento),
-    canalPreferido: asText(draft.canal_preferido),
+    tipoServico,
+    origem: asText(draft.origem),
+    destino: asText(draft.destino),
+    enderecoColeta: asText(draft.endereco_coleta),
+    enderecoEntrega: asText(draft.endereco_entrega),
+    itemDescricao: asText(draft.item_descricao),
+    destinatarioNome: asText(draft.destinatario_nome),
+    destinatarioTelefone: asText(draft.destinatario_telefone),
+    quando: asText(draft.quando) ?? "agora",
     dataPreferida: asText(draft.data_preferida),
     horarioPreferido: asText(draft.horario_preferido),
     raw: draft,
@@ -169,34 +194,46 @@ async function finalizar(
 
   await closeFlowSession(flowToken);
 
+  const order: Order = {
+    id: orderId,
+    contact_id: contactId,
+    flow_token: flowToken,
+    nome: asText(draft.nome),
+    tipo_servico: tipoServico,
+    origem: asText(draft.origem),
+    destino: asText(draft.destino),
+    endereco_coleta: asText(draft.endereco_coleta),
+    endereco_entrega: asText(draft.endereco_entrega),
+    item_descricao: asText(draft.item_descricao),
+    destinatario_nome: asText(draft.destinatario_nome),
+    destinatario_telefone: asText(draft.destinatario_telefone),
+    observacoes: null,
+    quando: asText(draft.quando) ?? "agora",
+    data_preferida: asText(draft.data_preferida),
+    horario_preferido: asText(draft.horario_preferido),
+    driver_id: null,
+    status: "pendente",
+    created_at: new Date().toISOString(),
+  };
+
+  // Não bloqueia a resposta ao cliente por muito tempo: é só notificações,
+  // e se falhar o pedido continua visível no painel para atender manualmente.
+  await despacharPedido(order).catch((erro) =>
+    console.error("[flow] falha ao despachar pedido:", erro),
+  );
+
   return {
     screen: "RESUMO",
     data: {
-      protocolo: protocoloDe(leadId),
-      resumo: resumoDe(draft),
+      protocolo: protocoloDe(orderId),
+      resumo: resumoPedido(order),
     },
   };
 }
 
 /** Primeiros 6 caracteres do UUID viram um protocolo legível ao telefone. */
-export function protocoloDe(leadId: string): string {
-  return `BIC-${leadId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
-}
-
-export function resumoDe(draft: Record<string, unknown>): string {
-  const partes = [
-    labelOf(SERVICOS, asText(draft.tipo_servico) ?? undefined),
-    labelOf(URGENCIAS, asText(draft.urgencia) ?? undefined),
-    formatarAgenda(asText(draft.data_preferida), asText(draft.horario_preferido)),
-  ];
-  return partes.filter((parte) => parte && parte !== "—").join(" · ");
-}
-
-function formatarAgenda(data: string | null, horario: string | null): string {
-  if (!data) return "";
-  const [ano, mes, dia] = data.split("-");
-  const dataBr = `${dia}/${mes}/${ano}`;
-  return horario ? `${dataBr} às ${horario}` : dataBr;
+export function protocoloDe(orderId: string): string {
+  return `BIC-${orderId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 }
 
 function asText(value: unknown): string | null {
@@ -209,13 +246,15 @@ function asText(value: unknown): string | null {
 async function voltarPara(
   screen: string | undefined,
   contactId: string,
+  draft: Record<string, unknown>,
 ): Promise<FlowResponse> {
   switch (screen) {
     case "AGENDAMENTO":
-      return telaDetalhes();
-    case "DETALHES":
-      return telaDemanda(contactId);
+      return draft.tipo_servico === "entrega" ? telaEntrega() : telaCorrida();
+    case "CORRIDA":
+    case "ENTREGA":
+      return telaServico(contactId);
     default:
-      return telaDemanda(contactId);
+      return telaServico(contactId);
   }
 }

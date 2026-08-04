@@ -4,7 +4,7 @@
  *
  *   node scripts/publish-flow.mjs --upload-key     # registra a chave pública
  *   node scripts/publish-flow.mjs --create         # cria o Flow (retorna o ID)
- *   node scripts/publish-flow.mjs --update         # sobe flows/lead-capture.flow.json
+ *   node scripts/publish-flow.mjs --update         # sobe flows/pedido-sob-demanda.flow.json
  *   node scripts/publish-flow.mjs --endpoint URL   # aponta o endpoint de dados
  *   node scripts/publish-flow.mjs --publish        # publica (vira imutável)
  *
@@ -62,8 +62,8 @@ async function createFlow() {
   const wabaId = requireEnv("WHATSAPP_BUSINESS_ACCOUNT_ID");
 
   const result = await graph(`${wabaId}/flows`, "POST", {
-    name: process.env.FLOW_NAME || "Captação de demanda",
-    categories: ["LEAD_GENERATION"],
+    name: process.env.FLOW_NAME || "Pedido de corrida ou entrega",
+    categories: ["OTHER"],
     // Sem endpoint_uri aqui: o Flow começa como rascunho e a URI é definida
     // depois, quando o deploy já existe.
   });
@@ -74,7 +74,7 @@ async function createFlow() {
 
 async function updateFlowJson() {
   const flowId = requireEnv("WHATSAPP_FLOW_ID");
-  const filePath = path.join(process.cwd(), "flows", "lead-capture.flow.json");
+  const filePath = path.join(process.cwd(), "flows", "pedido-sob-demanda.flow.json");
   const content = fs.readFileSync(filePath);
 
   // O upload do asset é multipart, não JSON.

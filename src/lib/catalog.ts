@@ -13,43 +13,13 @@ export interface Option {
 }
 
 export const SERVICOS: Option[] = [
-  { id: "consultoria", title: "Consultoria / diagnóstico" },
-  { id: "orcamento", title: "Orçamento de projeto" },
-  { id: "instalacao", title: "Instalação ou execução" },
-  { id: "manutencao", title: "Manutenção / suporte" },
-  { id: "outro", title: "Outro assunto" },
+  { id: "corrida", title: "Corrida", description: "Pedir uma corrida agora ou agendada" },
+  { id: "entrega", title: "Entrega", description: "Buscar e entregar algo em outro endereço" },
 ];
 
-export const URGENCIAS: Option[] = [
-  {
-    id: "imediata",
-    title: "Urgente",
-    description: "Preciso de retorno em até 48 horas",
-  },
-  {
-    id: "semana",
-    title: "Esta semana",
-    description: "Tenho alguma flexibilidade de data",
-  },
-  {
-    id: "planejamento",
-    title: "Estou planejando",
-    description: "Ainda estou levantando opções",
-  },
-];
-
-export const ORCAMENTOS: Option[] = [
-  { id: "ate_1k", title: "Até R$ 1.000" },
-  { id: "1k_5k", title: "R$ 1.000 a R$ 5.000" },
-  { id: "5k_20k", title: "R$ 5.000 a R$ 20.000" },
-  { id: "acima_20k", title: "Acima de R$ 20.000" },
-  { id: "indefinido", title: "Ainda não sei" },
-];
-
-export const CANAIS: Option[] = [
-  { id: "whatsapp", title: "WhatsApp" },
-  { id: "ligacao", title: "Ligação" },
-  { id: "email", title: "E-mail" },
+export const QUANDO: Option[] = [
+  { id: "agora", title: "Agora" },
+  { id: "agendado", title: "Agendar para depois" },
 ];
 
 export const HORARIOS_BASE = [
