@@ -10,6 +10,7 @@ import { redirectUriDe } from "@/lib/oauth-redirect";
 import {
   SETTINGS_KEYS,
   writeSetting,
+  type PendingConnection,
   type TokenMetadata,
   type WhatsAppCredentials,
 } from "@/lib/settings";
@@ -75,8 +76,27 @@ export async function GET(request: Request): Promise<Response> {
       });
     }
 
-    // Com um número só, não há o que escolher. Com vários, o primeiro vira o
-    // padrão e o painel permite trocar depois.
+    // Com um número só, não há o que escolher. Com vários — comum quando o
+    // usuário Meta tem acesso a mais de um negócio — o admin escolhe qual
+    // número usar, em vez de assumir o primeiro que a Meta devolver.
+    if (numeros.length > 1) {
+      const pendente: PendingConnection = {
+        accessToken: longo.access_token,
+        expiresIn: longo.expires_in,
+        connectedBy: perfil.name,
+        numeros: numeros.map((n) => ({
+          id: n.id,
+          wabaId: n.wabaId,
+          display_phone_number: n.display_phone_number,
+          verified_name: n.verified_name,
+        })),
+      };
+
+      await writeSetting(SETTINGS_KEYS.pendingConnection, pendente);
+
+      return voltarAoPainel(request, { conexao: "escolher" });
+    }
+
     const escolhido = numeros[0];
 
     const credenciais: WhatsAppCredentials = {

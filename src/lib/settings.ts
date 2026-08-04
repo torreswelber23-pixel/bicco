@@ -10,6 +10,7 @@ import { supabase } from "./supabase";
 export const SETTINGS_KEYS = {
   credentials: "whatsapp_credentials",
   tokenMetadata: "whatsapp_token_metadata",
+  pendingConnection: "whatsapp_pending_connection",
 } as const;
 
 export interface WhatsAppCredentials {
@@ -29,6 +30,23 @@ export interface TokenMetadata {
   connectedAt: string;
   /** Nome do usuário Meta que autorizou, para exibir no painel. */
   connectedBy?: string;
+}
+
+/**
+ * Guardado entre o callback do OAuth e a escolha do número, quando a conta
+ * autorizada enxerga mais de um número de WhatsApp — o token já é de longa
+ * duração, mas ainda não sabemos qual número o admin quer usar.
+ */
+export interface PendingConnection {
+  accessToken: string;
+  expiresIn?: number;
+  connectedBy?: string;
+  numeros: {
+    id: string;
+    wabaId: string;
+    display_phone_number?: string;
+    verified_name?: string;
+  }[];
 }
 
 export async function readSetting<T>(key: string): Promise<T | null> {

@@ -3,7 +3,17 @@ import { revalidatePath } from "next/cache";
 import { ADMIN_COOKIE, isAdmin, sessionValue } from "@/lib/admin-auth";
 import { env } from "@/lib/env";
 import { CANAIS, ORCAMENTOS, SERVICOS, URGENCIAS, labelOf } from "@/lib/catalog";
+import { descobrirNumeros } from "@/lib/meta-oauth";
 import { listLeads } from "@/lib/repository";
+import {
+  SETTINGS_KEYS,
+  deleteSetting,
+  readSetting,
+  writeSetting,
+  type PendingConnection,
+  type TokenMetadata,
+  type WhatsAppCredentials,
+} from "@/lib/settings";
 import { renovarToken } from "@/lib/token-refresh";
 import {
   diasRestantes,
@@ -44,6 +54,84 @@ async function renovar(): Promise<void> {
   revalidatePath("/admin");
 }
 
+/**
+ * Refaz a descoberta de números com o token já conectado — sem passar de
+ * novo pela tela de login da Meta — para o admin trocar qual número o
+ * sistema usa quando a conta autorizada enxerga mais de um.
+ */
+async function trocarNumero(): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  const credenciais = await readSetting<WhatsAppCredentials>(
+    SETTINGS_KEYS.credentials,
+  );
+  if (!credenciais) return;
+
+  try {
+    const numeros = await descobrirNumeros(credenciais.accessToken);
+    const metadata = await readSetting<TokenMetadata>(
+      SETTINGS_KEYS.tokenMetadata,
+    );
+
+    const pendente: PendingConnection = {
+      accessToken: credenciais.accessToken,
+      connectedBy: metadata?.connectedBy,
+      numeros,
+    };
+
+    await writeSetting(SETTINGS_KEYS.pendingConnection, pendente);
+  } catch (erro) {
+    console.error("[admin] falha ao listar números:", erro);
+  }
+
+  revalidatePath("/admin");
+}
+
+async function escolherNumero(formData: FormData): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  const phoneNumberId = String(formData.get("phoneNumberId") ?? "");
+  const pendente = await readSetting<PendingConnection>(
+    SETTINGS_KEYS.pendingConnection,
+  );
+  const escolhido = pendente?.numeros.find((n) => n.id === phoneNumberId);
+
+  if (pendente && escolhido) {
+    const metadataAtual = await readSetting<TokenMetadata>(
+      SETTINGS_KEYS.tokenMetadata,
+    );
+
+    const credenciais: WhatsAppCredentials = {
+      accessToken: pendente.accessToken,
+      phoneNumberId: escolhido.id,
+      wabaId: escolhido.wabaId,
+    };
+
+    const metadata: TokenMetadata = {
+      expiresAt: pendente.expiresIn
+        ? new Date(Date.now() + pendente.expiresIn * 1000).toISOString()
+        : metadataAtual?.expiresAt,
+      longLived:
+        pendente.expiresIn !== undefined
+          ? pendente.expiresIn > 60 * 60 * 24
+          : (metadataAtual?.longLived ?? true),
+      source: "oauth",
+      connectedAt: metadataAtual?.connectedAt ?? new Date().toISOString(),
+      connectedBy: pendente.connectedBy ?? metadataAtual?.connectedBy,
+    };
+
+    await writeSetting(SETTINGS_KEYS.credentials, credenciais);
+    await writeSetting(SETTINGS_KEYS.tokenMetadata, metadata);
+  }
+
+  await deleteSetting(SETTINGS_KEYS.pendingConnection);
+  revalidatePath("/admin");
+}
+
 export default async function Admin({
   searchParams,
 }: {
@@ -69,10 +157,11 @@ export default async function Admin({
   }
 
   const params = await searchParams;
-  const [credenciais, metadata, leads] = await Promise.all([
+  const [credenciais, metadata, leads, pendente] = await Promise.all([
     loadWhatsAppConfig(),
     loadTokenMetadata(),
     listLeads(),
+    readSetting<PendingConnection>(SETTINGS_KEYS.pendingConnection),
   ]);
 
   const dias = diasRestantes(metadata);
@@ -92,8 +181,35 @@ export default async function Admin({
           Não foi possível conectar: {params.motivo ?? "erro desconhecido"}
         </div>
       )}
+      {params.conexao === "escolher" && (
+        <div className="card aviso">
+          Login feito. Agora escolha qual número usar, logo abaixo.
+        </div>
+      )}
 
       <h2>Conexão com a Meta</h2>
+
+      {pendente && pendente.numeros.length > 0 && (
+        <div className="card aviso">
+          <p style={{ marginTop: 0 }}>
+            Essa conta enxerga {pendente.numeros.length} número(s) de
+            WhatsApp. Escolha qual usar:
+          </p>
+          {pendente.numeros.map((numero) => (
+            <form
+              key={numero.id}
+              action={escolherNumero}
+              style={{ marginBottom: "0.5rem" }}
+            >
+              <input type="hidden" name="phoneNumberId" value={numero.id} />
+              <button type="submit" className="botao secundario">
+                {numero.display_phone_number ?? numero.id}
+                {numero.verified_name ? ` — ${numero.verified_name}` : ""}
+              </button>
+            </form>
+          ))}
+        </div>
+      )}
 
       {!credenciais ? (
         <div className="card">
@@ -161,6 +277,9 @@ export default async function Admin({
                 <button type="submit">Renovar token</button>
               </form>
             )}
+            <form action={trocarNumero} style={{ display: "inline" }}>
+              <button type="submit">Trocar número</button>
+            </form>
             <a className="botao secundario" href="/api/auth/meta/start">
               Reconectar
             </a>
