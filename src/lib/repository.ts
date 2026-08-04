@@ -39,6 +39,18 @@ export interface Order {
   drivers?: { nome: string; telefone: string } | null;
 }
 
+export async function getContact(contactId: string): Promise<Contact | null> {
+  const db = supabase();
+  const { data, error } = await db
+    .from("contacts")
+    .select("id, wa_id, profile_name")
+    .eq("id", contactId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao ler contato: ${error.message}`);
+  return data as Contact | null;
+}
+
 /** Busca o contato pelo wa_id, criando-o na primeira mensagem. */
 export async function upsertContact(
   waId: string,

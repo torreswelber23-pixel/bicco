@@ -1,7 +1,7 @@
 # Setup completo
 
-Do zero até um número de WhatsApp que atende sozinho. Reserve cerca de uma hora
-na primeira vez — a maior parte é preenchimento de painel na Meta.
+Do zero até um número de WhatsApp que atende sozinho. Reserve cerca de meia
+hora na primeira vez — a maior parte é preenchimento de painel na Meta.
 
 ---
 
@@ -70,9 +70,7 @@ ser ignoradas.
 ## 2. Banco no Supabase
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
-2. **SQL Editor** → rode as migrações da pasta `supabase/migrations/`, em ordem:
-   `0001_init.sql` (tabelas do atendimento) e `0002_settings.sql` (credenciais
-   da Meta obtidas por OAuth).
+2. **SQL Editor** → rode as migrações da pasta `supabase/migrations/`, em ordem.
 3. **Project Settings → API**: copie a **Project URL** (`SUPABASE_URL`) e a chave
    **`service_role`** (`SUPABASE_SERVICE_ROLE_KEY`).
 
@@ -81,31 +79,7 @@ servidor — nunca em código de cliente, nunca no repositório.
 
 ---
 
-## 3. Chaves do endpoint de dados
-
-O endpoint de dados do Flow é cifrado ponta a ponta. Você gera um par RSA, manda
-a pública para a Meta e guarda a privada.
-
-```bash
-npm run keys:generate
-```
-
-O comando cria `keys/` (ignorada pelo git) e imprime a linha pronta do
-`FLOW_PRIVATE_KEY` para colar no `.env.local`.
-
-Depois de preencher `WHATSAPP_TOKEN` e `WHATSAPP_PHONE_NUMBER_ID` no
-`.env.local`, registre a pública:
-
-```bash
-npm run flow:publish -- --upload-key
-```
-
----
-
-## 4. Deploy na Vercel
-
-O Flow precisa de uma URL pública com HTTPS válido, então o deploy vem antes de
-terminar a configuração na Meta.
+## 3. Deploy na Vercel
 
 ```bash
 npx vercel            # primeiro deploy
@@ -113,11 +87,10 @@ npx vercel --prod
 ```
 
 Em **Project → Settings → Environment Variables**, cadastre todas as variáveis do
-`.env.example`. Para a `FLOW_PRIVATE_KEY`, cole o PEM inteiro com quebras de
-linha reais — o código também aceita `\n` literais, então qualquer um dos dois
-formatos funciona.
+`.env.example`.
 
-Anote a URL final, por exemplo `https://bicco.vercel.app`.
+Anote a URL final, por exemplo `https://bicco.vercel.app` — é ela que aparece
+no link que o cliente recebe no WhatsApp.
 
 ### Alternativa para desenvolvimento local
 
@@ -130,7 +103,7 @@ Meta precisa ser atualizada junto.
 
 ---
 
-## 5. Webhook
+## 4. Webhook
 
 No app da Meta: **WhatsApp → Configuration → Webhooks → Edit**.
 
@@ -146,46 +119,17 @@ webhook fica cadastrado mas nunca recebe nada.
 
 ---
 
-## 6. Criar e publicar o Flow
-
-```bash
-# 1. cria o Flow como rascunho e devolve o ID
-npm run flow:publish -- --create
-#    → copie o ID para WHATSAPP_FLOW_ID no .env.local e na Vercel
-
-# 2. envia as telas
-npm run flow:publish -- --update
-
-# 3. aponta o endpoint de dados
-npm run flow:publish -- --endpoint https://SEU-APP.vercel.app/api/whatsapp/flow
-
-# 4. publica
-npm run flow:publish -- --publish
-```
-
-O passo 2 retorna `validation_errors`. Se a lista não estiver vazia, corrija
-`flows/pedido-sob-demanda.flow.json` e rode de novo — a publicação só passa com a lista
-vazia.
-
-Antes de publicar, dá para testar pelo **Flow Builder** (WhatsApp Manager →
-Flows): há um preview interativo e um botão de envio para o seu próprio número.
-Enquanto o Flow estiver em rascunho, defina `FLOW_MODE=draft` nas variáveis de
-ambiente para que a mensagem consiga abri-lo.
-
-> **Publicar torna o Flow imutável.** As telas não mudam mais. Por isso as opções
-> dos dropdowns vêm do servidor (`src/lib/catalog.ts`): editar o catálogo não
-> exige republicar. Mudar a *estrutura* das telas exige criar um Flow novo.
-
----
-
-## 7. Teste de ponta a ponta
+## 5. Teste de ponta a ponta
 
 Mande qualquer mensagem para o número. O esperado:
 
-1. Chega uma mensagem com o botão **Descrever demanda**.
-2. O botão abre o formulário dentro do WhatsApp.
-3. Ao concluir, chega uma confirmação com protocolo.
-4. A demanda aparece em `https://SEU-APP.vercel.app/admin`.
+1. Chega uma mensagem com o botão **Fazer pedido**.
+2. O botão abre `/pedido?t=...` dentro do navegador embutido do WhatsApp.
+3. Escolha Corrida ou Entrega, preencha e envie.
+4. Chega uma confirmação com protocolo no WhatsApp.
+5. O pedido aparece em `https://SEU-APP.vercel.app/admin`.
+6. Se houver um motorista cadastrado e disponível (também em `/admin`), ele
+   recebe os botões **Aceitar** / **Recusar**.
 
 ### Quando não funciona
 
@@ -194,17 +138,16 @@ Mande qualquer mensagem para o número. O esperado:
 | Webhook não verifica | `WHATSAPP_VERIFY_TOKEN` diferente do painel |
 | Nenhuma mensagem chega | Campo `messages` não assinado em Webhook fields |
 | 401 no webhook | `WHATSAPP_APP_SECRET` errado |
-| Botão aparece mas o Flow não abre | Flow em rascunho sem `FLOW_MODE=draft`, ou `WHATSAPP_FLOW_ID` errado |
-| "Algo deu errado" ao abrir | Endpoint devolvendo erro — veja os logs da Vercel |
-| 421 nos logs | Chave pública registrada não corresponde à `FLOW_PRIVATE_KEY` |
-| Sessão expirada | `flow_token` sem registro em `flow_sessions` |
+| Botão chega mas o link dá erro | Sessão expirada ou já usada — peça pra empresa mandar o link de novo |
+| "Nenhum motorista disponível" (nos logs) | Cadastre um motorista em `/admin` com o tipo certo, marcado como disponível |
 
 Os logs da Vercel (**Deployments → Runtime Logs**) mostram as mensagens de
-`[flow]` e `[webhook]`, que identificam quase todos os casos acima.
+`[webhook]`, `[pedido]` e `[dispatch]`, que identificam quase todos os casos
+acima.
 
 ---
 
-## 8. Antes de atender cliente de verdade
+## 6. Antes de atender cliente de verdade
 
 - **Janela de 24h.** Fora dela você só pode iniciar conversa com *template*
   aprovado. O fluxo aqui é sempre reativo (o cliente fala primeiro), então
@@ -213,5 +156,5 @@ Os logs da Vercel (**Deployments → Runtime Logs**) mostram as mensagens de
   verificação do negócio.
 - **Custo.** Conversas iniciadas pelo cliente têm cota gratuita mensal; acima
   disso são cobradas por conversa, com preço que varia por país.
-- **LGPD.** Você passa a guardar telefone, nome e a descrição da demanda. Vale
+- **LGPD.** Você passa a guardar telefone, nome e os detalhes do pedido. Vale
   ter uma política de privacidade acessível e um caminho para exclusão de dados.

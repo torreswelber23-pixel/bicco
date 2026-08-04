@@ -9,10 +9,6 @@ build/
 .env.local
 .env*.local
 
-# chaves do endpoint de dados do Flow — nunca commitar
-keys/
-*.pem
-
 *.tsbuildinfo
 next-env.d.ts
 .vercel

@@ -122,14 +122,52 @@ form.login {
   max-width: 24rem;
 }
 
-input[type="password"] {
-  flex: 1;
+input[type="password"],
+input[type="text"],
+input[type="tel"],
+textarea,
+select {
+  width: 100%;
   padding: 0.55rem 0.7rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
   font: inherit;
+  box-sizing: border-box;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+label input[type="text"],
+label input[type="tel"],
+label textarea,
+label select {
+  margin-top: 0.35rem;
+  color: var(--fg);
+}
+
+label.opcao {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--fg);
+  font-size: 1rem;
+}
+
+label.opcao input {
+  width: auto;
 }
 
 button {
@@ -141,6 +179,11 @@ button {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .empty {

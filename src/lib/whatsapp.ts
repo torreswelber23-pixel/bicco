@@ -66,7 +66,7 @@ export async function markAsRead(messageId: string): Promise<void> {
   });
 }
 
-/** Token opaco que amarra a sessão do Flow ao contato do nosso banco. */
+/** Token opaco que amarra a sessão do pedido ao contato do nosso banco. */
 export function newFlowToken(): string {
   return crypto.randomUUID();
 }
@@ -108,49 +108,41 @@ export async function sendButtons(
   });
 }
 
-export interface SendFlowOptions {
+export interface SendCtaUrlOptions {
   to: string;
-  flowToken: string;
-  /** Tela inicial. Precisa bater com o id no Flow JSON. */
-  initialScreen?: string;
+  url: string;
+  /** Texto do botão. Máximo de 20 caracteres, limite da Meta. */
+  displayText: string;
   header?: string;
   body: string;
   footer?: string;
-  cta: string;
 }
 
 /**
- * Envia a mensagem interativa que abre o Flow.
+ * Mensagem com um botão que abre um link no navegador embutido do WhatsApp.
  *
- * `flow_action: "navigate"` faz o cliente abrir direto na tela informada;
- * como as telas puxam dados do servidor, o payload inicial vai vazio e o
- * INIT/data_exchange preenche o resto.
+ * Substitui o Flow: a página é HTML/CSS/JS normal, hospedada por nós, então
+ * dá pra atualizar a qualquer momento sem passar pela aprovação/publicação
+ * que o Flow exige da Meta.
  */
-export async function sendFlow(options: SendFlowOptions): Promise<void> {
+export async function sendCtaUrl(options: SendCtaUrlOptions): Promise<void> {
   await callGraph((id) => `${id}/messages`, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: options.to,
     type: "interactive",
     interactive: {
-      type: "flow",
+      type: "cta_url",
       ...(options.header
         ? { header: { type: "text", text: options.header } }
         : {}),
       body: { text: options.body },
       ...(options.footer ? { footer: { text: options.footer } } : {}),
       action: {
-        name: "flow",
+        name: "cta_url",
         parameters: {
-          flow_message_version: "3",
-          flow_token: options.flowToken,
-          flow_id: env.flowId,
-          flow_cta: options.cta,
-          mode: process.env.FLOW_MODE === "draft" ? "draft" : "published",
-          flow_action: "navigate",
-          flow_action_payload: {
-            screen: options.initialScreen ?? "SERVICO",
-          },
+          display_text: options.displayText,
+          url: options.url,
         },
       },
     },

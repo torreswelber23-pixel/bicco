@@ -1,5 +1,5 @@
 import { resumoPedido } from "./dispatch";
-import { protocoloDe } from "./flow-handler";
+import { protocoloDe } from "./order-handler";
 import {
   claimOrder,
   completeOrder,
@@ -8,15 +8,17 @@ import {
   recordMessage,
   upsertContact,
 } from "./repository";
-import { markAsRead, newFlowToken, sendButtons, sendFlow, sendText } from "./whatsapp";
+import { markAsRead, newFlowToken, sendButtons, sendCtaUrl, sendText } from "./whatsapp";
 
 /**
  * Tradução do payload do webhook para ações de atendimento.
  *
- * Três caminhos, pela forma da mensagem:
- *  - texto solto de quem não é motorista → abre o Flow de novo pedido;
- *  - nfm_reply (Flow concluído) → confirmação pro cliente;
+ * Dois caminhos, pela forma da mensagem:
+ *  - texto solto de quem não é motorista → manda o link do formulário de pedido;
  *  - button_reply de um motorista cadastrado → aceitar/recusar/concluir.
+ *
+ * A resposta do cliente ao formulário não passa mais por aqui: ele preenche
+ * numa página normal (/pedido) que fala direto com /api/pedido.
  */
 
 interface WebhookMessage {
@@ -26,7 +28,6 @@ interface WebhookMessage {
   text?: { body: string };
   interactive?: {
     type: string;
-    nfm_reply?: { response_json?: string; name?: string; body?: string };
     button_reply?: { id: string; title: string };
   };
 }
@@ -42,7 +43,10 @@ export interface WebhookPayload {
   entry?: Array<{ changes?: Array<{ field?: string; value?: WebhookValue }> }>;
 }
 
-export async function processWebhook(payload: WebhookPayload): Promise<void> {
+export async function processWebhook(
+  payload: WebhookPayload,
+  baseUrl: string,
+): Promise<void> {
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value;
@@ -52,7 +56,7 @@ export async function processWebhook(payload: WebhookPayload): Promise<void> {
 
       for (const message of value.messages) {
         try {
-          await processMessage(message, profileName);
+          await processMessage(message, profileName, baseUrl);
         } catch (error) {
           // Um erro numa mensagem não pode impedir as outras nem gerar
           // reentrega infinita: a Meta reenvia enquanto não receber 200.
@@ -65,7 +69,8 @@ export async function processWebhook(payload: WebhookPayload): Promise<void> {
 
 async function processMessage(
   message: WebhookMessage,
-  profileName?: string,
+  profileName: string | undefined,
+  baseUrl: string,
 ): Promise<void> {
   await markAsRead(message.id).catch(() => {
     /* marcar como lida é cosmético */
@@ -88,69 +93,38 @@ async function processMessage(
     payload: message,
   });
 
-  // Resposta final do Flow: chega como interactive/nfm_reply.
-  if (message.type === "interactive" && message.interactive?.nfm_reply) {
-    await confirmarRecebimento(message);
-    return;
-  }
-
-  await abrirFlow(contact.id, message.from, profileName);
+  await enviarLinkDoPedido(contact.id, message.from, profileName, baseUrl);
 }
 
-async function abrirFlow(
+async function enviarLinkDoPedido(
   contactId: string,
   to: string,
-  profileName?: string,
+  profileName: string | undefined,
+  baseUrl: string,
 ): Promise<void> {
-  const flowToken = newFlowToken();
-  await openFlowSession(flowToken, contactId);
+  const token = newFlowToken();
+  await openFlowSession(token, contactId);
 
   const saudacao = profileName ? `Olá, ${profileName.split(" ")[0]}!` : "Olá!";
+  const url = `${baseUrl}/pedido?t=${token}`;
 
-  await sendFlow({
+  await sendCtaUrl({
     to,
-    flowToken,
-    initialScreen: "SERVICO",
+    url,
+    displayText: "Fazer pedido",
     header: "Pedir corrida ou entrega",
     body:
       `${saudacao} Toque no botão abaixo pra pedir uma corrida ou uma entrega. ` +
       `Leva menos de um minuto.`,
     footer: "Corrida ou entrega",
-    cta: "Fazer pedido",
   });
 
   await recordMessage({
     contactId,
     direction: "outbound",
-    type: "interactive_flow",
-    payload: { flow_token: flowToken },
+    type: "cta_url",
+    payload: { token, url },
   });
-}
-
-async function confirmarRecebimento(message: WebhookMessage): Promise<void> {
-  const responseJson = message.interactive?.nfm_reply?.response_json;
-  let protocolo = "";
-  let resumo = "";
-
-  if (responseJson) {
-    try {
-      const parsed = JSON.parse(responseJson) as Record<string, unknown>;
-      protocolo = String(parsed.protocolo ?? "");
-      resumo = String(parsed.resumo ?? "");
-    } catch (error) {
-      console.error("[webhook] response_json inválido:", error);
-    }
-  }
-
-  const linhas = [
-    "Pedido registrado! ✅",
-    protocolo ? `Protocolo: *${protocolo}*` : "",
-    resumo ? resumo : "",
-    "",
-    "Estamos buscando um motorista disponível. Assim que alguém aceitar, avisamos por aqui.",
-  ];
-
-  await sendText(message.from, linhas.filter(Boolean).join("\n"));
 }
 
 async function processarRespostaMotorista(message: WebhookMessage): Promise<void> {

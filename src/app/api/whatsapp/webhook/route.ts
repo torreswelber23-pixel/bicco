@@ -1,3 +1,4 @@
+import { baseUrlDe } from "@/lib/base-url";
 import { REQUIRED_ENV, env, missingEnv } from "@/lib/env";
 import { isValidSignature } from "@/lib/signature";
 import { processWebhook, type WebhookPayload } from "@/lib/webhook-handler";
@@ -69,7 +70,7 @@ export async function POST(request: Request): Promise<Response> {
   // A Meta reenvia enquanto não receber 200, e reenvio duplica atendimento.
   // Por isso o processamento nunca propaga exceção para cá.
   try {
-    await processWebhook(payload);
+    await processWebhook(payload, baseUrlDe(request));
   } catch (error) {
     console.error("[webhook] erro não tratado:", error);
   }

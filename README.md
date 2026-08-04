@@ -1,29 +1,32 @@
 # Bicco — corrida e entrega sob demanda pelo WhatsApp
 
-Quem manda mensagem no seu número recebe automaticamente um **formulário nativo
-do WhatsApp** (WhatsApp Flow) pra pedir uma **corrida** ou uma **entrega**. O
-pedido vira uma solicitação estruturada no banco e é oferecido, na hora, a
-todos os motoristas/entregadores cadastrados e disponíveis — o primeiro que
-tocar "Aceitar" fica com ele.
+Quem manda mensagem no seu número recebe um botão que abre, dentro do próprio
+WhatsApp, uma página pra pedir uma **corrida** ou uma **entrega**. O pedido
+vira uma solicitação estruturada no banco e é oferecido, na hora, a todos os
+motoristas/entregadores cadastrados e disponíveis — o primeiro que tocar
+"Aceitar" fica com ele.
 
 Sem bot de menu numérico, sem "digite 1 para orçamento": o cliente preenche
-dentro do próprio WhatsApp, e o motorista aceita com um toque, também pelo
-WhatsApp.
+numa página normal (aberta pelo navegador embutido do WhatsApp), e o
+motorista aceita com um toque, também pelo WhatsApp.
 
 ```
 Cliente manda mensagem
         │
         ▼
-/api/whatsapp/webhook ──── envia a mensagem interativa que abre o Flow
+/api/whatsapp/webhook ──── manda um botão com link (cta_url)
         │
         ▼
-Cliente escolhe Corrida ou Entrega e preenche endereços
-        │
-        ▼  (cada tela, cifrada ponta a ponta)
-/api/whatsapp/flow ──────── valida assinatura, decifra, decide a próxima tela
+Cliente toca no botão ──── abre /pedido?t=<token> no navegador do WhatsApp
         │
         ▼
-Supabase (leads) grava o pedido + dispara "Aceitar/Recusar" pros motoristas
+Escolhe Corrida ou Entrega, preenche endereços, envia
+        │
+        ▼
+/api/pedido ──────────────── valida o token, grava o pedido
+        │
+        ▼
+Supabase (leads) + dispara "Aceitar/Recusar" pros motoristas
         │
         ▼
 Motorista toca "Aceitar" ──── primeiro a tocar fica com o pedido
@@ -32,21 +35,34 @@ Motorista toca "Aceitar" ──── primeiro a tocar fica com o pedido
 Cliente recebe nome e contato do motorista; /admin mostra tudo em tempo real
 ```
 
+## Por que página web e não WhatsApp Flow
+
+A primeira versão usava [WhatsApp Flows](https://developers.facebook.com/docs/whatsapp/flows) —
+o formulário nativo da Meta. Na prática isso trava a operação por coisas fora
+do nosso controle: o Flow precisa ser **publicado** pela Meta antes de
+funcionar de verdade, e essa publicação pode ser recusada com `Blocked by
+Integrity` — um bloqueio de confiança da conta, sem relação com o conteúdo do
+formulário, que pode levar dias pra se resolver (verificação de negócio, app
+em modo "Ativo", histórico de mensagens).
+
+O botão de **link (`cta_url`)** faz a mesma coisa sem depender de nada disso:
+é só uma mensagem com um botão que abre uma URL no navegador embutido do
+WhatsApp. A página é HTML/CSS/JS normal, hospedada por nós — dá pra mudar um
+campo ou o texto de um botão e o efeito é imediato, sem publicar nada na Meta.
+
 ## O que já está pronto
 
 | Peça | Onde |
 | --- | --- |
 | Webhook (verificação + recebimento) | `src/app/api/whatsapp/webhook/route.ts` |
-| Endpoint de dados do Flow (cripto) | `src/app/api/whatsapp/flow/route.ts` |
-| Criptografia RSA + AES-GCM | `src/lib/flow-crypto.ts` |
-| Regras de navegação entre telas | `src/lib/flow-handler.ts` |
-| Definição das telas | `flows/pedido-sob-demanda.flow.json` |
+| Página do formulário de pedido | `src/app/pedido/` |
+| Endpoint que grava o pedido | `src/app/api/pedido/route.ts` |
+| Regra de negócio do pedido | `src/lib/order-handler.ts` |
 | Despacho pros motoristas/entregadores | `src/lib/dispatch.ts` |
 | OAuth com a Meta | `src/app/api/auth/meta/` |
 | Renovação automática do token | `src/app/api/cron/refresh-token/route.ts` |
 | Esquema do banco | `supabase/migrations/` |
-| Painel de demandas e conexão | `src/app/admin/page.tsx` |
-| Scripts de chaves / publicação / simulação | `scripts/` |
+| Painel de pedidos, motoristas e conexão | `src/app/admin/page.tsx` |
 
 ## Conexão com a Meta
 
@@ -73,26 +89,28 @@ O caminho manual (`WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` em variável de
 ambiente) continua funcionando como fallback — vale enquanto nenhuma conta
 estiver conectada pelo painel.
 
-## O Flow
+## O formulário de pedido
 
-Definido em `flows/pedido-sob-demanda.flow.json`:
+`src/app/pedido/PedidoForm.tsx` é um componente cliente com quatro telas,
+todas no mesmo arquivo (sem roteamento — é mais simples trocar de tela via
+estado do que criar uma rota por passo):
 
-1. **SERVICO** — nome e escolha entre Corrida ou Entrega.
-2. **CORRIDA** — endereço de partida, de destino, e se é agora ou agendado.
-3. **ENTREGA** — endereço de coleta, de entrega, o que vai ser entregue, e
+1. **Serviço** — nome e escolha entre Corrida ou Entrega.
+2. **Corrida** — endereço de partida, de destino, e se é agora ou agendado.
+3. **Entrega** — endereço de coleta, de entrega, o que vai ser entregue, e
    dados de quem recebe.
-4. **AGENDAMENTO** — só aparece quando o cliente escolhe "agendar para
-   depois". Os horários já reservados vêm marcados como indisponíveis.
-5. **RESUMO** — protocolo e recapitulação; o pedido já sai "buscando
-   motorista" assim que essa tela é exibida.
+4. **Agendamento** — só aparece quando o cliente escolhe "agendar para
+   depois". Os horários já reservados vêm marcados como indisponíveis
+   (`/api/pedido/horarios`).
 
-As opções de cada tela vêm do servidor (`src/lib/catalog.ts`), não estão fixas no
-Flow JSON. Isso importa porque **um Flow publicado é imutável**: mudar uma opção
-de dropdown sem isso exigiria publicar uma nova versão.
+Ao enviar, a página faz um `POST /api/pedido` com o token da sessão (gerado no
+webhook, guardado em `flow_sessions`) e os dados preenchidos. O servidor valida
+o token, grava o pedido e despacha pros motoristas — tudo isso sem depender de
+nenhum passo de aprovação da Meta.
 
 ## Despacho para motoristas e entregadores
 
-Ao concluir o Flow (`finalizar()` em `src/lib/flow-handler.ts`), o pedido é
+Ao criar o pedido (`criarPedido()` em `src/lib/order-handler.ts`), ele é
 oferecido a todos os motoristas/entregadores cadastrados, disponíveis e do
 tipo certo (`src/lib/dispatch.ts`): cada um recebe uma mensagem com botões
 "Aceitar" / "Recusar".
@@ -107,24 +125,6 @@ tipo certo (`src/lib/dispatch.ts`): cada um recebe uma mensagem com botões
 - **Aceitar dispara um botão de "Concluir".** Quando o motorista toca, o
   pedido vira `concluido` e o cliente recebe um aviso.
 
-## Como estudar sem depender da Meta
-
-O simulador reproduz exatamente o que o app do WhatsApp faz — gera a chave AES,
-cifra com a sua pública, assina com o app secret, chama o endpoint e decifra a
-resposta:
-
-```bash
-npm run keys:generate          # gera keys/public.pem e keys/private.pem
-npm run dev
-npm run flow:simulate ping     # health check da Meta
-npm run flow:simulate init <flow_token>
-npm run flow:simulate demanda <flow_token>
-```
-
-`ping` funciona só com `WHATSAPP_APP_SECRET` e `FLOW_PRIVATE_KEY` no
-`.env.local`. `init` e `demanda` precisam de um `flow_token` que exista na tabela
-`flow_sessions`.
-
 ## Rodando
 
 ```bash
@@ -133,34 +133,26 @@ cp .env.example .env.local     # preencha conforme docs/SETUP.md
 npm run dev
 ```
 
-O passo a passo completo — criar o app na Meta, gerar e registrar as chaves,
-publicar o Flow, apontar o webhook, subir na Vercel — está em
-[`docs/SETUP.md`](docs/SETUP.md).
+O passo a passo completo — criar o app na Meta, conectar via OAuth, apontar o
+webhook, subir na Vercel — está em [`docs/SETUP.md`](docs/SETUP.md).
 
 ## Detalhes que costumam quebrar
 
 - **Assinatura sobre o corpo bruto.** `X-Hub-Signature-256` é calculada sobre os
-  bytes originais. Reserializar o JSON antes de validar invalida a assinatura —
-  por isso os handlers leem `request.text()`, não `request.json()`.
-- **IV invertido na resposta.** A resposta usa a mesma chave AES da requisição,
-  mas com o IV negado bit a bit, e volta como base64 puro (`text/plain`), não
-  JSON.
-- **Códigos de status têm significado.** `421` faz o cliente descartar a chave de
-  sessão e refazer o handshake; `432` sinaliza assinatura inválida. Devolver
-  `500` no lugar deles trava o Flow para o usuário.
+  bytes originais do payload do webhook. Reserializar o JSON antes de validar
+  invalida a assinatura — por isso o handler lê `request.text()`, não
+  `request.json()`.
 - **Webhook sempre responde 200.** A Meta reenvia enquanto não receber 200, e
   reenvio duplicaria o atendimento. Erros são registrados no log, não propagados.
-- **Estado fica no servidor.** Cada `data_exchange` traz apenas os campos da tela
-  atual, então as respostas são acumuladas em `flow_sessions.draft`. O
-  `flow_token` é a única credencial da sessão — é ele que amarra a demanda ao
-  contato, e um token desconhecido é rejeitado.
+- **O token da sessão é a única credencial do pedido.** Gerado no webhook e
+  gravado em `flow_sessions`, é ele que amarra o pedido ao contato certo — um
+  token desconhecido ou já usado é rejeitado (`UnknownOrderTokenError`).
 
 ## Segurança
 
 - `SUPABASE_SERVICE_ROLE_KEY` ignora RLS e só existe no servidor. As tabelas têm
   RLS ligado **sem policies**, então uma chave pública vazada não lê nada.
-- `keys/`, `.env` e `.env.local` estão no `.gitignore`. A chave privada do Flow
-  nunca deve ser commitada.
+- `.env` e `.env.local` estão no `.gitignore`.
 - `npm audit` reporta 3 avisos de severidade alta em `postcss` e `sharp`, ambos
   dependências transitivas do Next 16.2.12 (a versão mais recente). Não há
   correção disponível sem rebaixar o Next; some quando o Next atualizar.

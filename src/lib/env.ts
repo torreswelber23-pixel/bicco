@@ -24,14 +24,8 @@ function optional(name: string, fallback = ""): string {
  * Checar isso na entrada evita o pior modo de falha: o getter lançar no meio da
  * expressão e o Next devolver 500 de corpo vazio, que não diz nada a quem está
  * configurando na Meta.
- *
- * Só o mínimo indispensável entra aqui. O `ping` do health check, por exemplo,
- * nunca toca no Supabase — exigir as chaves do banco reprovaria uma verificação
- * que na prática funcionaria.
  */
 export const REQUIRED_ENV = {
-  /** Decifrar e validar assinatura: todo POST do Flow passa por isso. */
-  flowEndpoint: ["WHATSAPP_APP_SECRET", "FLOW_PRIVATE_KEY"],
   /** Handshake do webhook compara só o verify token. */
   webhookVerify: ["WHATSAPP_VERIFY_TOKEN"],
   /** Recebimento de mensagens: valida assinatura antes de qualquer coisa. */
@@ -46,8 +40,6 @@ export const REQUIRED_ENV = {
   todas: [
     "WHATSAPP_APP_SECRET",
     "WHATSAPP_VERIFY_TOKEN",
-    "FLOW_PRIVATE_KEY",
-    "WHATSAPP_FLOW_ID",
     "META_APP_ID",
     "CRON_SECRET",
     "SUPABASE_URL",
@@ -77,38 +69,6 @@ export const env = {
   /** Token arbitrário que você escolhe e repete no painel da Meta ao registrar o webhook. */
   get verifyToken() {
     return required("WHATSAPP_VERIFY_TOKEN");
-  },
-  /**
-   * Chave privada RSA (PEM) do endpoint de dados do Flow.
-   *
-   * Aceita três formatos, nessa ordem de tentativa:
-   *   1. PEM multi-linha, colado com quebras de linha reais.
-   *   2. PEM em uma linha, com "\n" literal no lugar das quebras.
-   *   3. O PEM inteiro codificado em base64, sem quebras.
-   *
-   * O formato 3 existe porque campos de texto (e IAs colando por engano)
-   * tendem a corromper quebras de linha e espaços ao colar um PEM. Base64
-   * não usa nenhum desses caracteres como parte do conteúdo, então é
-   * impossível um campo de texto "quebrar" o valor — na pior das hipóteses
-   * insere espaço em branco, que a gente remove antes de decodificar.
-   */
-  get flowPrivateKey() {
-    const raw = required("FLOW_PRIVATE_KEY").trim();
-
-    if (raw.includes("BEGIN")) {
-      return raw.replace(/\\n/g, "\n");
-    }
-
-    const semEspacos = raw.replace(/\s+/g, "");
-    return Buffer.from(semEspacos, "base64").toString("utf-8");
-  },
-  /** Passphrase da chave privada, se ela tiver sido gerada com uma. */
-  get flowPrivateKeyPassphrase() {
-    return optional("FLOW_PRIVATE_KEY_PASSPHRASE");
-  },
-  /** ID do Flow publicado, usado ao enviar a mensagem interativa. */
-  get flowId() {
-    return required("WHATSAPP_FLOW_ID");
   },
   /**
    * ID do app na Meta, usado no OAuth.

@@ -1,10 +1,8 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { ADMIN_COOKIE, isAdmin, sessionValue } from "@/lib/admin-auth";
 import { SERVICOS, labelOf } from "@/lib/catalog";
 import { env } from "@/lib/env";
-import { publicarFlow } from "@/lib/flow-publish";
 import { descobrirNumeros } from "@/lib/meta-oauth";
 import {
   createDriver,
@@ -75,24 +73,6 @@ async function renovar(): Promise<void> {
   }
 
   revalidatePath("/admin");
-}
-
-async function publicar(): Promise<void> {
-  "use server";
-
-  if (!(await isAdmin())) return;
-
-  let resultado;
-  try {
-    resultado = await publicarFlow();
-  } catch (erro) {
-    console.error("[admin] falha ao publicar flow:", erro);
-    resultado = { publicado: false, mensagem: "Erro inesperado ao publicar." };
-  }
-
-  redirect(
-    `/admin?${resultado.publicado ? "flow=ok" : `flow=erro&flow_motivo=${encodeURIComponent(resultado.mensagem)}`}`,
-  );
 }
 
 /**
@@ -268,15 +248,6 @@ export default async function Admin({
           Login feito. Agora escolha qual número usar, logo abaixo.
         </div>
       )}
-      {params.flow === "ok" && (
-        <div className="card aviso ok">Flow publicado com sucesso.</div>
-      )}
-      {params.flow === "erro" && (
-        <div className="card aviso erro">
-          Não foi possível publicar o Flow: {params.flow_motivo ?? "erro desconhecido"}
-        </div>
-      )}
-
       <h2>Conexão com a Meta</h2>
 
       {pendente && pendente.numeros.length > 0 && (
@@ -376,20 +347,6 @@ export default async function Admin({
           </div>
         </div>
       )}
-
-      <h2>Flow</h2>
-      <div className="card">
-        <p style={{ marginTop: 0 }}>
-          Depois de colar o JSON no Flow Builder, publique por aqui — evita ir
-          até o WhatsApp Manager. Publicar é definitivo: o Flow vira imutável,
-          então revise as telas antes de clicar.
-        </p>
-        <form action={publicar}>
-          <button type="submit" disabled={!credenciais}>
-            Publicar Flow
-          </button>
-        </form>
-      </div>
 
       <h2>Motoristas e entregadores</h2>
       <p className="sub">
