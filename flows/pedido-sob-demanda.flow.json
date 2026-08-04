@@ -27,10 +27,6 @@
             { "id": "corrida", "title": "Corrida", "description": "Pedir uma corrida" },
             { "id": "entrega", "title": "Entrega", "description": "Buscar e entregar algo" }
           ]
-        },
-        "nome_sugerido": {
-          "type": "string",
-          "__example__": "Maria"
         }
       },
       "layout": {
@@ -49,8 +45,7 @@
                 "name": "nome",
                 "label": "Seu nome",
                 "input-type": "text",
-                "required": true,
-                "init-value": "${data.nome_sugerido}"
+                "required": true
               },
               {
                 "type": "RadioButtonsGroup",

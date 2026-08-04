@@ -9,7 +9,6 @@ import {
   mergeFlowDraft,
   type Order,
 } from "./repository";
-import { supabase } from "./supabase";
 
 /**
  * Regras de negócio do endpoint de dados.
@@ -57,11 +56,11 @@ export async function handleFlowRequest(
   if (!session) throw new UnknownFlowTokenError();
 
   if (request.action === "INIT") {
-    return telaServico(session.contact_id);
+    return telaServico();
   }
 
   if (request.action === "BACK") {
-    return voltarPara(request.screen, session.contact_id, session.draft);
+    return voltarPara(request.screen, session.draft);
   }
 
   const origem = String(request.data?.screen ?? request.screen ?? "");
@@ -120,19 +119,10 @@ export async function handleFlowRequest(
   }
 }
 
-async function telaServico(contactId: string): Promise<FlowResponse> {
-  const { data } = await supabase()
-    .from("contacts")
-    .select("profile_name")
-    .eq("id", contactId)
-    .maybeSingle();
-
+function telaServico(): FlowResponse {
   return {
     screen: "SERVICO",
-    data: {
-      servicos: SERVICOS,
-      nome_sugerido: (data as { profile_name?: string } | null)?.profile_name ?? "",
-    },
+    data: { servicos: SERVICOS },
   };
 }
 
@@ -243,18 +233,14 @@ function asText(value: unknown): string | null {
 }
 
 /** BACK: o cliente pede a tela anterior, que precisa vir repopulada. */
-async function voltarPara(
+function voltarPara(
   screen: string | undefined,
-  contactId: string,
   draft: Record<string, unknown>,
-): Promise<FlowResponse> {
+): FlowResponse {
   switch (screen) {
     case "AGENDAMENTO":
       return draft.tipo_servico === "entrega" ? telaEntrega() : telaCorrida();
-    case "CORRIDA":
-    case "ENTREGA":
-      return telaServico(contactId);
     default:
-      return telaServico(contactId);
+      return telaServico();
   }
 }
