@@ -1,22 +1,39 @@
 import crypto from "node:crypto";
 import { env } from "./env";
+import { loadWhatsAppConfig } from "./whatsapp-config";
 
 /**
  * Wrapper mínimo sobre a WhatsApp Cloud API (Graph API).
  *
- * Só o que o atendimento precisa: mandar texto, mandar a mensagem que abre o
- * Flow e marcar mensagem como lida.
+ * As credenciais vêm de `loadWhatsAppConfig()`, não de variável de ambiente
+ * direto: com o OAuth, o token é renovado periodicamente e gravado no banco,
+ * e ler do lugar errado significaria usar um token vencido.
  */
 
-function graphUrl(path: string): string {
-  return `https://graph.facebook.com/${env.graphApiVersion}/${path}`;
+export class WhatsAppNaoConfiguradoError extends Error {
+  constructor() {
+    super(
+      "WhatsApp não configurado. Conecte a conta da Meta em /admin " +
+        "ou defina WHATSAPP_TOKEN e WHATSAPP_PHONE_NUMBER_ID.",
+    );
+    this.name = "WhatsAppNaoConfiguradoError";
+  }
 }
 
-async function callGraph(path: string, body: unknown): Promise<unknown> {
-  const response = await fetch(graphUrl(path), {
+async function callGraph(
+  caminho: (phoneNumberId: string) => string,
+  body: unknown,
+): Promise<unknown> {
+  const config = await loadWhatsAppConfig();
+  if (!config) throw new WhatsAppNaoConfiguradoError();
+
+  const versao = config.graphVersion ?? env.graphApiVersion;
+  const url = `https://graph.facebook.com/${versao}/${caminho(config.phoneNumberId)}`;
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.whatsappToken}`,
+      Authorization: `Bearer ${config.accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -25,16 +42,14 @@ async function callGraph(path: string, body: unknown): Promise<unknown> {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(
-      `Graph API ${response.status}: ${JSON.stringify(payload)}`,
-    );
+    throw new Error(`Graph API ${response.status}: ${JSON.stringify(payload)}`);
   }
 
   return payload;
 }
 
 export async function sendText(to: string, text: string): Promise<void> {
-  await callGraph(`${env.phoneNumberId}/messages`, {
+  await callGraph((id) => `${id}/messages`, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to,
@@ -44,7 +59,7 @@ export async function sendText(to: string, text: string): Promise<void> {
 }
 
 export async function markAsRead(messageId: string): Promise<void> {
-  await callGraph(`${env.phoneNumberId}/messages`, {
+  await callGraph((id) => `${id}/messages`, {
     messaging_product: "whatsapp",
     status: "read",
     message_id: messageId,
@@ -75,7 +90,7 @@ export interface SendFlowOptions {
  * INIT/data_exchange preenche o resto.
  */
 export async function sendFlow(options: SendFlowOptions): Promise<void> {
-  await callGraph(`${env.phoneNumberId}/messages`, {
+  await callGraph((id) => `${id}/messages`, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: options.to,

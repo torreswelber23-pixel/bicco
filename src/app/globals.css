@@ -152,3 +152,63 @@ button {
 .error {
   color: #c0392b;
 }
+
+/* --- conexão com a Meta --- */
+
+.botao {
+  display: inline-block;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.botao.secundario {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.aviso {
+  border-left: 3px solid var(--muted);
+}
+
+.aviso.ok {
+  border-left-color: var(--accent);
+}
+
+.aviso.erro {
+  border-left-color: #c0392b;
+}
+
+table.simples {
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+table.simples th {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+  padding-left: 0;
+  width: 14rem;
+}
+
+table.simples td {
+  padding-right: 0;
+}
+
+table.simples tr:last-child th,
+table.simples tr:last-child td {
+  border-bottom: none;
+}

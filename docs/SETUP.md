@@ -28,10 +28,31 @@ Em **App Settings → Basic**, copie o **App Secret** → `WHATSAPP_APP_SECRET`.
 > **WhatsApp → Phone Numbers**. O número precisa estar livre: não pode ter conta
 > no WhatsApp comum ou Business ativa.
 
-### Token permanente
+### O token: conectar pelo painel (recomendado)
 
-O token de 24h serve para o primeiro teste e depois expira no pior momento. Para
-produção:
+Você **não precisa** copiar token nenhum à mão. Depois do deploy, abra
+`/admin`, clique em **Conectar com a Meta** e faça login. O sistema:
+
+- troca a autorização por um token de longa duração (~60 dias);
+- descobre sozinho o Phone Number ID e o WABA ID;
+- guarda tudo no banco (tabela `settings`);
+- renova automaticamente por cron quando faltam 15 dias.
+
+Para isso funcionar, cadastre a URL de retorno no app da Meta:
+
+> **Login do Facebook** → **Configurações** → **URIs de redirecionamento
+> OAuth válidos** → `https://SEU-APP.vercel.app/api/auth/meta/callback`
+
+E preencha `META_APP_ID` (o ID do app, em App Settings → Basic).
+
+> **Sobre a renovação:** reenviar um token que já é de longa duração nem sempre
+> devolve uma janela nova — a Meta costuma manter a mesma expiração. O painel
+> compara a validade antes e depois e avisa quando isso acontece; nesse caso a
+> saída é clicar em **Reconectar**, que gera autorização nova de verdade.
+
+### Alternativa: token permanente de usuário do sistema
+
+Se preferir um token que nunca expira, em vez de renovar de tempos em tempos:
 
 1. business.facebook.com → **Configurações do negócio** → **Usuários** →
    **Usuários do sistema** → **Adicionar**, com papel *Admin*.
@@ -39,14 +60,19 @@ produção:
 3. **Gerar novo token** → escolha o app → marque `whatsapp_business_messaging` e
    `whatsapp_business_management` → validade **Nunca expira**.
 
-Esse token é o `WHATSAPP_TOKEN`.
+Coloque em `WHATSAPP_TOKEN`, junto com `WHATSAPP_PHONE_NUMBER_ID`. Essas duas
+variáveis são o caminho manual: valem enquanto nenhuma conta estiver conectada
+pelo painel. Depois de conectar por lá, o banco tem precedência e elas passam a
+ser ignoradas.
 
 ---
 
 ## 2. Banco no Supabase
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
-2. **SQL Editor** → cole o conteúdo de `supabase/migrations/0001_init.sql` → Run.
+2. **SQL Editor** → rode as migrações da pasta `supabase/migrations/`, em ordem:
+   `0001_init.sql` (tabelas do atendimento) e `0002_settings.sql` (credenciais
+   da Meta obtidas por OAuth).
 3. **Project Settings → API**: copie a **Project URL** (`SUPABASE_URL`) e a chave
    **`service_role`** (`SUPABASE_SERVICE_ROLE_KEY`).
 

@@ -35,9 +35,36 @@ Supabase (leads) + confirmação com protocolo de volta no WhatsApp
 | Criptografia RSA + AES-GCM | `src/lib/flow-crypto.ts` |
 | Regras de navegação entre telas | `src/lib/flow-handler.ts` |
 | Definição das telas | `flows/lead-capture.flow.json` |
-| Esquema do banco | `supabase/migrations/0001_init.sql` |
-| Painel de demandas | `src/app/admin/page.tsx` |
+| OAuth com a Meta | `src/app/api/auth/meta/` |
+| Renovação automática do token | `src/app/api/cron/refresh-token/route.ts` |
+| Esquema do banco | `supabase/migrations/` |
+| Painel de demandas e conexão | `src/app/admin/page.tsx` |
 | Scripts de chaves / publicação / simulação | `scripts/` |
+
+## Conexão com a Meta
+
+O token do WhatsApp é obtido por **OAuth**, não por copiar e colar. Em `/admin`
+você clica em "Conectar com a Meta", faz login, e o sistema descobre o número,
+guarda o token no banco e passa a renová-lo sozinho.
+
+Três decisões que valem explicar, porque cada uma corrige um jeito comum de
+errar:
+
+- **A troca por token de longa duração é obrigatória.** O `code` da autorização
+  vira um token de ~1 hora; só a segunda troca dá os ~60 dias. Guardar o token
+  curto "porque é melhor que nada" faz o atendimento morrer no mesmo dia, com
+  sintoma idêntico ao de token inválido.
+- **A renovação verifica se realmente renovou.** Reenviar um token que já é de
+  longa duração costuma devolver a mesma expiração, não uma janela nova. O
+  código compara a validade antes e depois e avisa quando o prazo não avançou —
+  aí a saída é reconectar, não renovar de novo.
+- **As rotas exigem autenticação.** Iniciar autorização, ver status ou renovar
+  são ações de administrador; o cron usa `CRON_SECRET`. Sem isso, qualquer um
+  que descubra a URL rotaciona credencial de produção.
+
+O caminho manual (`WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` em variável de
+ambiente) continua funcionando como fallback — vale enquanto nenhuma conta
+estiver conectada pelo painel.
 
 ## O Flow
 

@@ -36,14 +36,20 @@ export const REQUIRED_ENV = {
   webhookVerify: ["WHATSAPP_VERIFY_TOKEN"],
   /** Recebimento de mensagens: valida assinatura antes de qualquer coisa. */
   webhookReceive: ["WHATSAPP_APP_SECRET"],
-  /** Tudo que o atendimento completo usa, para o diagnóstico do GET. */
+  /**
+   * Tudo que o atendimento completo usa, para o diagnóstico do GET.
+   *
+   * WHATSAPP_TOKEN e WHATSAPP_PHONE_NUMBER_ID não entram aqui: com o OAuth
+   * eles passam a vir do banco, e exigi-los como variável faria o diagnóstico
+   * acusar falta de algo que já está resolvido por outro caminho.
+   */
   todas: [
-    "WHATSAPP_TOKEN",
-    "WHATSAPP_PHONE_NUMBER_ID",
     "WHATSAPP_APP_SECRET",
     "WHATSAPP_VERIFY_TOKEN",
     "FLOW_PRIVATE_KEY",
     "WHATSAPP_FLOW_ID",
+    "META_APP_ID",
+    "CRON_SECRET",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
     "ADMIN_PASSWORD",
@@ -103,6 +109,25 @@ export const env = {
   /** ID do Flow publicado, usado ao enviar a mensagem interativa. */
   get flowId() {
     return required("WHATSAPP_FLOW_ID");
+  },
+  /**
+   * ID do app na Meta, usado no OAuth.
+   *
+   * Não é segredo — aparece na URL de autorização que o usuário vê. O App
+   * Secret correspondente é o mesmo WHATSAPP_APP_SECRET já usado para validar
+   * assinaturas, por isso não há uma variável separada para ele.
+   */
+  get metaAppId() {
+    return required("META_APP_ID");
+  },
+  /**
+   * Segredo que autoriza as rotas de cron.
+   *
+   * Sem isso, qualquer um que descubra a URL consegue disparar a renovação de
+   * credencial de produção.
+   */
+  get cronSecret() {
+    return required("CRON_SECRET");
   },
   get graphApiVersion() {
     return optional("GRAPH_API_VERSION", "v21.0");
