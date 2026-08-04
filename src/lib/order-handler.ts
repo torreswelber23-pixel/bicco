@@ -1,25 +1,19 @@
 import { despacharPedido, resumoPedido } from "./dispatch";
-import {
-  closeFlowSession,
-  createOrder,
-  findFlowSession,
-  type Order,
-} from "./repository";
+import { closeFlowSession, createOrder, type Order } from "./repository";
 
 /**
- * Regra de negócio de criação de pedido, chamada pela rota /api/pedido depois
- * que o cliente preenche o formulário na página web.
+ * Regra de negócio de criação de pedido, chamada pelo webhook depois que o
+ * cliente responde a última pergunta da conversa.
+ *
+ * Diferente do jeito anterior (formulário web com token na URL), aqui quem
+ * já validou a sessão é o próprio webhook-handler — ele encontrou a sessão
+ * aberta pelo contact_id de quem mandou a mensagem, então essa função só
+ * grava e despacha.
  */
 
-export class UnknownOrderTokenError extends Error {
-  constructor() {
-    super("token não corresponde a nenhuma sessão aberta.");
-    this.name = "UnknownOrderTokenError";
-  }
-}
-
 export interface DadosPedido {
-  token: string;
+  flowToken: string;
+  contactId: string;
   nome: string;
   tipoServico: "corrida" | "entrega";
   origem?: string;
@@ -40,12 +34,9 @@ export interface ResultadoPedido {
 }
 
 export async function criarPedido(dados: DadosPedido): Promise<ResultadoPedido> {
-  const session = await findFlowSession(dados.token);
-  if (!session || session.status !== "open") throw new UnknownOrderTokenError();
-
   const orderId = await createOrder({
-    contactId: session.contact_id,
-    flowToken: dados.token,
+    contactId: dados.contactId,
+    flowToken: dados.flowToken,
     nome: dados.nome,
     tipoServico: dados.tipoServico,
     origem: dados.origem ?? null,
@@ -61,12 +52,12 @@ export async function criarPedido(dados: DadosPedido): Promise<ResultadoPedido> 
     raw: dados,
   });
 
-  await closeFlowSession(dados.token);
+  await closeFlowSession(dados.flowToken);
 
   const order: Order = {
     id: orderId,
-    contact_id: session.contact_id,
-    flow_token: dados.token,
+    contact_id: dados.contactId,
+    flow_token: dados.flowToken,
     nome: dados.nome,
     tipo_servico: dados.tipoServico,
     origem: dados.origem ?? null,

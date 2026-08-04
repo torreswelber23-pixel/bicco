@@ -3,24 +3,19 @@ export default function Home() {
     <main>
       <h1>Bicco · corrida e entrega sob demanda pelo WhatsApp</h1>
       <p className="sub">
-        Quem manda mensagem recebe um botão que abre, dentro do próprio
-        WhatsApp, uma página pra pedir uma corrida ou uma entrega. O pedido é
-        oferecido na hora aos motoristas e entregadores disponíveis.
+        Quem manda mensagem responde uma conversa curta — lista pra escolher
+        corrida ou entrega, localização pra endereços — sem sair do WhatsApp.
+        O pedido é oferecido na hora aos motoristas e entregadores
+        disponíveis.
       </p>
 
       <h2>Endpoints</h2>
       <div className="card">
         <strong>Webhook</strong>
         <br />
-        <code>/api/whatsapp/webhook</code> — recebe as mensagens, manda o link
-        do pedido e trata as respostas dos motoristas. Cadastre esta URL em
-        Configuration → Webhooks.
-      </div>
-      <div className="card">
-        <strong>Formulário de pedido</strong>
-        <br />
-        <code>/pedido</code> — página que o cliente abre pelo botão do
-        WhatsApp; escolhe corrida ou entrega e envia.
+        <code>/api/whatsapp/webhook</code> — recebe as mensagens, conduz a
+        conversa do pedido e trata as respostas dos motoristas. Cadastre esta
+        URL em Configuration → Webhooks.
       </div>
       <div className="card">
         <strong>Painel</strong>

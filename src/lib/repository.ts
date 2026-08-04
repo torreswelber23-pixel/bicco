@@ -39,18 +39,6 @@ export interface Order {
   drivers?: { nome: string; telefone: string } | null;
 }
 
-export async function getContact(contactId: string): Promise<Contact | null> {
-  const db = supabase();
-  const { data, error } = await db
-    .from("contacts")
-    .select("id, wa_id, profile_name")
-    .eq("id", contactId)
-    .maybeSingle();
-
-  if (error) throw new Error(`Falha ao ler contato: ${error.message}`);
-  return data as Contact | null;
-}
-
 /** Busca o contato pelo wa_id, criando-o na primeira mensagem. */
 export async function upsertContact(
   waId: string,
@@ -113,12 +101,6 @@ export async function openFlowSession(
   if (error) throw new Error(`Falha ao abrir sessão do Flow: ${error.message}`);
 }
 
-/**
- * Resolve o dono de uma sessão do Flow.
- *
- * O endpoint de dados recebe só o flow_token, então é essa tabela que impede
- * que um token forjado grave pedido em nome de outro contato.
- */
 export async function findFlowSession(flowToken: string): Promise<{
   contact_id: string;
   status: string;
@@ -140,6 +122,35 @@ export async function findFlowSession(flowToken: string): Promise<{
     draft: Record<string, unknown> | null;
   };
   return { ...row, draft: row.draft ?? {} };
+}
+
+/**
+ * A sessão de pedido em andamento de um contato, se houver.
+ *
+ * A conversa não carrega token nenhum de volta (diferente do link do
+ * formulário web) — cada mensagem que chega do WhatsApp só tem o número de
+ * quem mandou, então é por ali que a gente acha em qual pergunta o cliente
+ * está.
+ */
+export async function findOpenSession(contactId: string): Promise<{
+  flow_token: string;
+  draft: Record<string, unknown>;
+} | null> {
+  const db = supabase();
+  const { data, error } = await db
+    .from("flow_sessions")
+    .select("flow_token, draft")
+    .eq("contact_id", contactId)
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao ler sessão aberta: ${error.message}`);
+  if (!data) return null;
+
+  const row = data as { flow_token: string; draft: Record<string, unknown> | null };
+  return { flow_token: row.flow_token, draft: row.draft ?? {} };
 }
 
 /** Acumula as respostas de uma tela no rascunho da sessão. */

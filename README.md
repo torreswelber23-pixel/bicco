@@ -1,32 +1,35 @@
 # Bicco — corrida e entrega sob demanda pelo WhatsApp
 
-Quem manda mensagem no seu número recebe um botão que abre, dentro do próprio
-WhatsApp, uma página pra pedir uma **corrida** ou uma **entrega**. O pedido
-vira uma solicitação estruturada no banco e é oferecido, na hora, a todos os
-motoristas/entregadores cadastrados e disponíveis — o primeiro que tocar
-"Aceitar" fica com ele.
+Quem manda mensagem no seu número responde uma conversa curta, sem sair do
+WhatsApp: escolhe **corrida** ou **entrega** numa lista nativa, compartilha a
+localização pelo seletor de mapa do próprio app, e o pedido é oferecido, na
+hora, a todos os motoristas/entregadores cadastrados e disponíveis — o
+primeiro que tocar "Aceitar" fica com ele.
 
-Sem bot de menu numérico, sem "digite 1 para orçamento": o cliente preenche
-numa página normal (aberta pelo navegador embutido do WhatsApp), e o
-motorista aceita com um toque, também pelo WhatsApp.
+Sem bot de menu numérico, sem link pra abrir fora do app: cada pergunta é uma
+mensagem (lista, botões, ou "envie sua localização"), e o motorista aceita
+com um toque, também pelo WhatsApp.
 
 ```
-Cliente manda mensagem
+Cliente manda "oi"
         │
         ▼
-/api/whatsapp/webhook ──── manda um botão com link (cta_url)
+Lista: Corrida ou Entrega?
         │
         ▼
-Cliente toca no botão ──── abre /pedido?t=<token> no navegador do WhatsApp
+"Qual seu nome?" (texto)
         │
         ▼
-Escolhe Corrida ou Entrega, preenche endereços, envia
+"Envie sua localização" (seletor nativo de mapa) — origem/destino ou coleta/entrega
         │
         ▼
-/api/pedido ──────────────── valida o token, grava o pedido
+Entrega: "O que vai ser entregue?" + destinatário (opcional)
         │
         ▼
-Supabase (leads) + dispara "Aceitar/Recusar" pros motoristas
+Botões: Agora ou Agendar?  → se agendar, lista de dia + lista de horário
+        │
+        ▼
+Supabase (leads) grava o pedido + dispara "Aceitar/Recusar" pros motoristas
         │
         ▼
 Motorista toca "Aceitar" ──── primeiro a tocar fica com o pedido
@@ -35,28 +38,32 @@ Motorista toca "Aceitar" ──── primeiro a tocar fica com o pedido
 Cliente recebe nome e contato do motorista; /admin mostra tudo em tempo real
 ```
 
-## Por que página web e não WhatsApp Flow
+## Por que conversa nativa e não WhatsApp Flow
 
 A primeira versão usava [WhatsApp Flows](https://developers.facebook.com/docs/whatsapp/flows) —
 o formulário nativo da Meta. Na prática isso trava a operação por coisas fora
 do nosso controle: o Flow precisa ser **publicado** pela Meta antes de
 funcionar de verdade, e essa publicação pode ser recusada com `Blocked by
 Integrity` — um bloqueio de confiança da conta, sem relação com o conteúdo do
-formulário, que pode levar dias pra se resolver (verificação de negócio, app
-em modo "Ativo", histórico de mensagens).
+formulário, que pode levar dias pra se resolver.
 
-O botão de **link (`cta_url`)** faz a mesma coisa sem depender de nada disso:
-é só uma mensagem com um botão que abre uma URL no navegador embutido do
-WhatsApp. A página é HTML/CSS/JS normal, hospedada por nós — dá pra mudar um
-campo ou o texto de um botão e o efeito é imediato, sem publicar nada na Meta.
+A segunda versão trocou o Flow por um botão de link (`cta_url`) que abria uma
+página web nossa. Funcionava, mas em alguns aparelhos/versões do app o link
+abre no navegador do sistema em vez do navegador embutido do WhatsApp — o
+cliente sai do app pra preencher o formulário.
+
+Esta versão usa só os tipos de mensagem nativos do WhatsApp (lista, botões,
+solicitação de localização): sem link, sem página externa, sem publicação —
+o cliente nunca sai da conversa. A limitação é que WhatsApp não tem um campo
+de texto livre "nativo" fora do Flow, então nome/descrição são perguntados
+como mensagens de texto normais, uma pergunta por vez.
 
 ## O que já está pronto
 
 | Peça | Onde |
 | --- | --- |
-| Webhook (verificação + recebimento) | `src/app/api/whatsapp/webhook/route.ts` |
-| Página do formulário de pedido | `src/app/pedido/` |
-| Endpoint que grava o pedido | `src/app/api/pedido/route.ts` |
+| Webhook + máquina de estados da conversa | `src/app/api/whatsapp/webhook/route.ts`, `src/lib/webhook-handler.ts` |
+| Mensagens nativas (lista, botões, localização) | `src/lib/whatsapp.ts` |
 | Regra de negócio do pedido | `src/lib/order-handler.ts` |
 | Despacho pros motoristas/entregadores | `src/lib/dispatch.ts` |
 | OAuth com a Meta | `src/app/api/auth/meta/` |
@@ -89,24 +96,36 @@ O caminho manual (`WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` em variável de
 ambiente) continua funcionando como fallback — vale enquanto nenhuma conta
 estiver conectada pelo painel.
 
-## O formulário de pedido
+## A conversa
 
-`src/app/pedido/PedidoForm.tsx` é um componente cliente com quatro telas,
-todas no mesmo arquivo (sem roteamento — é mais simples trocar de tela via
-estado do que criar uma rota por passo):
+`src/lib/webhook-handler.ts` é uma máquina de estados: cada sessão guarda em
+`flow_sessions.draft.step` qual pergunta o cliente está respondendo, e
+`avancarConversa()` decide o que fazer com a próxima mensagem que chegar.
 
-1. **Serviço** — nome e escolha entre Corrida ou Entrega.
-2. **Corrida** — endereço de partida, de destino, e se é agora ou agendado.
-3. **Entrega** — endereço de coleta, de entrega, o que vai ser entregue, e
-   dados de quem recebe.
-4. **Agendamento** — só aparece quando o cliente escolhe "agendar para
-   depois". Os horários já reservados vêm marcados como indisponíveis
-   (`/api/pedido/horarios`).
+Diferente do link do formulário web (que carregava um token na URL), aqui a
+sessão é encontrada pelo **contact_id de quem mandou a mensagem**
+(`findOpenSession` em `src/lib/repository.ts`) — mensagens do WhatsApp não
+carregam token nenhum de volta.
 
-Ao enviar, a página faz um `POST /api/pedido` com o token da sessão (gerado no
-webhook, guardado em `flow_sessions`) e os dados preenchidos. O servidor valida
-o token, grava o pedido e despacha pros motoristas — tudo isso sem depender de
-nenhum passo de aprovação da Meta.
+Passos, em ordem:
+
+1. **`servico`** — lista com Corrida/Entrega.
+2. **`nome`** — pergunta de texto simples.
+3. **`origem`/`destino`** (corrida) ou **`coleta`/`entrega_endereco`** (entrega)
+   — pedido de localização nativo; a resposta chega com endereço, nome do
+   lugar ou só as coordenadas, dependendo do que o cliente compartilhou.
+4. **`item`**, **`dest_nome`**, **`dest_telefone`** (só entrega) — texto livre;
+   os dois últimos aceitam "pular".
+5. **`quando`** — botões Agora/Agendar.
+6. **`data`/`horario`** (só se agendar) — listas geradas a partir de
+   `src/lib/catalog.ts`; os horários já ocupados nesse dia são filtrados fora
+   da lista antes de mandar.
+
+Um `button_reply` é ambíguo entre duas conversas diferentes — cliente
+respondendo Agora/Agendar, ou motorista respondendo Aceitar/Recusar/Concluir
+— por isso os botões do motorista sempre carregam `:` no id
+(`aceitar:<pedido>`) e os do cliente nunca carregam; é assim que
+`processMessage` decide pra qual lado mandar cada resposta.
 
 ## Despacho para motoristas e entregadores
 
@@ -144,9 +163,12 @@ webhook, subir na Vercel — está em [`docs/SETUP.md`](docs/SETUP.md).
   `request.json()`.
 - **Webhook sempre responde 200.** A Meta reenvia enquanto não receber 200, e
   reenvio duplicaria o atendimento. Erros são registrados no log, não propagados.
-- **O token da sessão é a única credencial do pedido.** Gerado no webhook e
-  gravado em `flow_sessions`, é ele que amarra o pedido ao contato certo — um
-  token desconhecido ou já usado é rejeitado (`UnknownOrderTokenError`).
+- **Listas têm limite de 10 itens e textos curtos.** Título de item: 24
+  caracteres; descrição: 72; texto de botão: 20. Catálogos maiores exigem
+  paginar ou resumir o texto.
+- **Localização pode vir sem endereço.** Se o cliente manda a posição atual
+  (GPS) em vez de pesquisar um lugar, `address` e `name` vêm vazios — só
+  latitude/longitude. `formatarLocalizacao()` cobre os três casos.
 
 ## Segurança
 

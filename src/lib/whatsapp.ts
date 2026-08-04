@@ -108,43 +108,62 @@ export async function sendButtons(
   });
 }
 
-export interface SendCtaUrlOptions {
-  to: string;
-  url: string;
-  /** Texto do botão. Máximo de 20 caracteres, limite da Meta. */
-  displayText: string;
-  header?: string;
-  body: string;
-  footer?: string;
+export interface ItemLista {
+  /** Vai e volta em interactive.list_reply.id. Máximo de 200 caracteres. */
+  id: string;
+  /** Máximo de 24 caracteres, limite da Meta. */
+  title: string;
+  /** Máximo de 72 caracteres. */
+  description?: string;
 }
 
 /**
- * Mensagem com um botão que abre um link no navegador embutido do WhatsApp.
+ * Mensagem com um menu de até 10 opções (lista nativa do WhatsApp).
  *
- * Substitui o Flow: a página é HTML/CSS/JS normal, hospedada por nós, então
- * dá pra atualizar a qualquer momento sem passar pela aprovação/publicação
- * que o Flow exige da Meta.
+ * Usada pra escolhas com mais de 3 alternativas — botões só aguentam 3.
+ * `buttonText` é o rótulo que abre o menu (ex.: "Ver opções"), não uma opção
+ * em si.
  */
-export async function sendCtaUrl(options: SendCtaUrlOptions): Promise<void> {
+export async function sendList(
+  to: string,
+  body: string,
+  buttonText: string,
+  itens: ItemLista[],
+): Promise<void> {
   await callGraph((id) => `${id}/messages`, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
-    to: options.to,
+    to,
     type: "interactive",
     interactive: {
-      type: "cta_url",
-      ...(options.header
-        ? { header: { type: "text", text: options.header } }
-        : {}),
-      body: { text: options.body },
-      ...(options.footer ? { footer: { text: options.footer } } : {}),
+      type: "list",
+      body: { text: body },
       action: {
-        name: "cta_url",
-        parameters: {
-          display_text: options.displayText,
-          url: options.url,
-        },
+        button: buttonText,
+        sections: [{ rows: itens }],
       },
+    },
+  });
+}
+
+/**
+ * Pede pro cliente compartilhar uma localização — o seletor nativo de mapa
+ * do WhatsApp, sem sair do app.
+ *
+ * A resposta chega como uma mensagem type: "location", com latitude/longitude
+ * e, se o cliente pesquisou um lugar em vez de mandar a posição atual,
+ * name/address preenchidos.
+ */
+export async function sendLocationRequest(to: string, body: string): Promise<void> {
+  await callGraph((id) => `${id}/messages`, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "location_request_message",
+      body: { text: body },
+      action: { name: "send_location" },
     },
   });
 }

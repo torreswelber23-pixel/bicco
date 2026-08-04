@@ -123,12 +123,17 @@ webhook fica cadastrado mas nunca recebe nada.
 
 Mande qualquer mensagem para o número. O esperado:
 
-1. Chega uma mensagem com o botão **Fazer pedido**.
-2. O botão abre `/pedido?t=...` dentro do navegador embutido do WhatsApp.
-3. Escolha Corrida ou Entrega, preencha e envie.
-4. Chega uma confirmação com protocolo no WhatsApp.
-5. O pedido aparece em `https://SEU-APP.vercel.app/admin`.
-6. Se houver um motorista cadastrado e disponível (também em `/admin`), ele
+1. Chega uma lista pra escolher **Corrida** ou **Entrega**.
+2. Pergunta o nome (responda por texto).
+3. Pede pra compartilhar localização (toque no clipe ou no botão de anexo e
+   escolha "Localização") — uma ou duas vezes, dependendo do serviço.
+4. Se for entrega, pergunta o que vai ser entregue e o destinatário
+   (responda "pular" pra pular).
+5. Pergunta se é **Agora** ou **Agendar** (botões). Se agendar, mostra lista
+   de dia e depois de horário.
+6. Chega uma confirmação com protocolo no WhatsApp.
+7. O pedido aparece em `https://SEU-APP.vercel.app/admin`.
+8. Se houver um motorista cadastrado e disponível (também em `/admin`), ele
    recebe os botões **Aceitar** / **Recusar**.
 
 ### Quando não funciona
@@ -138,7 +143,7 @@ Mande qualquer mensagem para o número. O esperado:
 | Webhook não verifica | `WHATSAPP_VERIFY_TOKEN` diferente do painel |
 | Nenhuma mensagem chega | Campo `messages` não assinado em Webhook fields |
 | 401 no webhook | `WHATSAPP_APP_SECRET` errado |
-| Botão chega mas o link dá erro | Sessão expirada ou já usada — peça pra empresa mandar o link de novo |
+| Pede a mesma pergunta de novo, sem sair do lugar | Resposta não bateu com o passo esperado (ex.: mandou texto quando pedia localização) — confira os logs `[webhook]` |
 | "Nenhum motorista disponível" (nos logs) | Cadastre um motorista em `/admin` com o tipo certo, marcado como disponível |
 
 Os logs da Vercel (**Deployments → Runtime Logs**) mostram as mensagens de
