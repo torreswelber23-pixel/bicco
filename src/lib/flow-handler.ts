@@ -119,7 +119,7 @@ export async function handleFlowRequest(
   }
 }
 
-function telaServico(): FlowResponse {
+export function telaServico(): FlowResponse {
   return {
     screen: "SERVICO",
     data: { servicos: SERVICOS },

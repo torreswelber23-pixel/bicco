@@ -5,7 +5,11 @@ import {
   encryptResponse,
   isEncryptedFlowRequest,
 } from "@/lib/flow-crypto";
-import { UnknownFlowTokenError, handleFlowRequest } from "@/lib/flow-handler";
+import {
+  UnknownFlowTokenError,
+  handleFlowRequest,
+  telaServico,
+} from "@/lib/flow-handler";
 import { isValidSignature } from "@/lib/signature";
 
 export const runtime = "nodejs";
@@ -80,17 +84,12 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof UnknownFlowTokenError) {
-      // Token expirado/desconhecido: o cliente mostra a tela de erro amigável.
-      const encrypted = encryptResponse(
-        {
-          data: {
-            acknowledged: true,
-            error_msg: "Esta sessão expirou. Envie uma nova mensagem para recomeçar.",
-          },
-        },
-        aesKey,
-        initialVector,
-      );
+      // Token expirado/desconhecido: volta pro início do Flow. A resposta
+      // precisa bater exatamente com o schema de "data" declarado pra tela
+      // no Flow JSON — por isso reusa telaServico() em vez de inventar campos
+      // extras (acknowledged/error_msg), que a Meta rejeita como propriedade
+      // não permitida.
+      const encrypted = encryptResponse(telaServico(), aesKey, initialVector);
       return new Response(encrypted, {
         status: 200,
         headers: { "Content-Type": "text/plain" },
