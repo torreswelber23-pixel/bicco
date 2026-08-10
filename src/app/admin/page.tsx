@@ -151,8 +151,12 @@ async function novaChaveApi(formData: FormData): Promise<void> {
   try {
     const { chave } = await criarChave(nome);
     await writeSetting(SETTINGS_KEYS.apiKeyReveal, { nome, chave });
+    await deleteSetting(SETTINGS_KEYS.apiKeyError);
   } catch (erro) {
     console.error("[admin] falha ao criar chave de API:", erro);
+    await writeSetting(SETTINGS_KEYS.apiKeyError, {
+      mensagem: erro instanceof Error ? erro.message : "Falha desconhecida.",
+    });
   }
 
   revalidatePath("/admin");
@@ -164,6 +168,15 @@ async function esconderChaveApi(): Promise<void> {
   if (!(await isAdmin())) return;
 
   await deleteSetting(SETTINGS_KEYS.apiKeyReveal);
+  revalidatePath("/admin");
+}
+
+async function esconderErroChaveApi(): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  await deleteSetting(SETTINGS_KEYS.apiKeyError);
   revalidatePath("/admin");
 }
 
@@ -209,16 +222,25 @@ export default async function Admin({
   }
 
   const params = await searchParams;
-  const [credenciais, metadata, pendente, chaves, webhooks, contatos, reveladaOuNao] =
-    await Promise.all([
-      loadWhatsAppConfig(),
-      loadTokenMetadata(),
-      readSetting<PendingConnection>(SETTINGS_KEYS.pendingConnection),
-      listarChaves().catch(() => []),
-      listarWebhooks().catch(() => []),
-      listContacts({ limit: 20, offset: 0 }).catch(() => []),
-      readSetting<{ nome: string; chave: string }>(SETTINGS_KEYS.apiKeyReveal),
-    ]);
+  const [
+    credenciais,
+    metadata,
+    pendente,
+    chaves,
+    webhooks,
+    contatos,
+    reveladaOuNao,
+    erroChave,
+  ] = await Promise.all([
+    loadWhatsAppConfig(),
+    loadTokenMetadata(),
+    readSetting<PendingConnection>(SETTINGS_KEYS.pendingConnection),
+    listarChaves().catch(() => []),
+    listarWebhooks().catch(() => []),
+    listContacts({ limit: 20, offset: 0 }).catch(() => []),
+    readSetting<{ nome: string; chave: string }>(SETTINGS_KEYS.apiKeyReveal),
+    readSetting<{ mensagem: string }>(SETTINGS_KEYS.apiKeyError),
+  ]);
 
   const dias = diasRestantes(metadata);
 
@@ -347,6 +369,25 @@ export default async function Admin({
         Chaves para outras plataformas usarem este WhatsApp. A documentação
         dos endpoints está em <code>docs/API.md</code>.
       </p>
+
+      {erroChave && (
+        <div className="card aviso erro">
+          <p style={{ marginTop: 0, marginBottom: 0 }}>
+            Não foi possível criar a chave: {erroChave.mensagem}
+          </p>
+          {erroChave.mensagem.includes("api_keys") && (
+            <p className="sub" style={{ marginBottom: 0 }}>
+              Parece que a migração <code>supabase/migrations/0003_api.sql</code>{" "}
+              ainda não foi rodada no Supabase. Rode no SQL Editor do projeto.
+            </p>
+          )}
+          <form action={esconderErroChaveApi}>
+            <button type="submit" className="botao secundario">
+              Ok
+            </button>
+          </form>
+        </div>
+      )}
 
       {reveladaOuNao && (
         <div className="card aviso ok">

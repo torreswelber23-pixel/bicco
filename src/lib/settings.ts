@@ -19,6 +19,8 @@ export const SETTINGS_KEYS = {
    * vive até o admin clicar em "já copiei", e some.
    */
   apiKeyReveal: "api_key_reveal",
+  /** Erro da última tentativa de criar chave, para o painel mostrar em vez de engolir. */
+  apiKeyError: "api_key_error",
 } as const;
 
 export interface WhatsAppCredentials {
