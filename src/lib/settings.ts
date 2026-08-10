@@ -11,6 +11,14 @@ export const SETTINGS_KEYS = {
   credentials: "whatsapp_credentials",
   tokenMetadata: "whatsapp_token_metadata",
   pendingConnection: "whatsapp_pending_connection",
+  /**
+   * Chave de API recém-criada, aguardando ser copiada.
+   *
+   * Existe porque a chave em claro só pode ser exibida uma vez: passá-la na
+   * URL a deixaria no histórico do navegador e nos logs de acesso. Aqui ela
+   * vive até o admin clicar em "já copiei", e some.
+   */
+  apiKeyReveal: "api_key_reveal",
 } as const;
 
 export interface WhatsAppCredentials {

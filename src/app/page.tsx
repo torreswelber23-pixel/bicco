@@ -18,9 +18,16 @@ export default function Home() {
         URL em Configuration → Webhooks.
       </div>
       <div className="card">
+        <strong>API</strong>
+        <br />
+        <code>/api/v1</code> — enviar mensagens, ler conversas, consultar
+        pedidos e receber eventos por webhook, a partir de outra plataforma.
+        Autenticação por chave; referência em <code>docs/API.md</code>.
+      </div>
+      <div className="card">
         <strong>Painel</strong>
         <br />
-        <code>/admin</code> — pedidos e motoristas cadastrados.
+        <code>/admin</code> — pedidos, motoristas e chaves de API.
       </div>
 
       <h2>Configuração</h2>

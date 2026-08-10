@@ -1,5 +1,6 @@
 import { despacharPedido, resumoPedido } from "./dispatch";
 import { closeFlowSession, createOrder, type Order } from "./repository";
+import { emitirEvento } from "./webhooks-out";
 
 /**
  * Regra de negócio de criação de pedido, chamada pelo webhook depois que o
@@ -75,6 +76,8 @@ export async function criarPedido(dados: DadosPedido): Promise<ResultadoPedido> 
     status: "pendente",
     created_at: new Date().toISOString(),
   };
+
+  await emitirEvento("order.created", { order });
 
   // Não bloqueia a resposta ao cliente por muito tempo: é só notificações,
   // e se falhar o pedido continua visível no painel para atender manualmente.

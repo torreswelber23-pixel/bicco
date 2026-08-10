@@ -58,11 +58,36 @@ o cliente nunca sai da conversa. A limitação é que WhatsApp não tem um campo
 de texto livre "nativo" fora do Flow, então nome/descrição são perguntados
 como mensagens de texto normais, uma pergunta por vez.
 
+## API para outras plataformas
+
+O número conectado não atende só a este app: há uma **API REST** em
+`/api/v1`, autenticada por chave, que expõe o WhatsApp para um CRM, um ERP ou
+qualquer outro sistema — enviar mensagem, ler conversa, consultar pedidos e
+receber eventos por webhook.
+
+```
+POST /api/v1/messages        envia texto, botões, lista ou pedido de localização
+GET  /api/v1/messages        histórico de uma conversa
+GET  /api/v1/contacts        quem já falou com o número
+GET  /api/v1/orders          pedidos captados pela conversa
+POST /api/v1/webhooks        registra destino para receber eventos
+```
+
+As chaves são criadas em `/admin` e guardadas como hash — o valor em claro
+aparece uma vez só. Os eventos (`message.received`, `order.created`,
+`order.assigned`, `order.completed`) chegam ao destino assinados com HMAC em
+`X-Bicco-Signature`, para o outro lado distinguir um evento real de um POST
+forjado por quem descobriu a URL.
+
+Referência completa: [`docs/API.md`](docs/API.md).
+
 ## O que já está pronto
 
 | Peça | Onde |
 | --- | --- |
 | Webhook + máquina de estados da conversa | `src/app/api/whatsapp/webhook/route.ts`, `src/lib/webhook-handler.ts` |
+| API pública v1 | `src/app/api/v1/`, `src/lib/api-http.ts`, `src/lib/api-keys.ts` |
+| Webhooks de saída | `src/lib/webhooks-out.ts` |
 | Mensagens nativas (lista, botões, localização) | `src/lib/whatsapp.ts` |
 | Regra de negócio do pedido | `src/lib/order-handler.ts` |
 | Despacho pros motoristas/entregadores | `src/lib/dispatch.ts` |

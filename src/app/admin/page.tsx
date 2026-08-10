@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ADMIN_COOKIE, isAdmin, sessionValue } from "@/lib/admin-auth";
+import { criarChave, listarChaves, revogarChave } from "@/lib/api-keys";
 import { SERVICOS, labelOf } from "@/lib/catalog";
 import { env } from "@/lib/env";
 import { descobrirNumeros } from "@/lib/meta-oauth";
@@ -26,6 +27,7 @@ import {
   loadTokenMetadata,
   loadWhatsAppConfig,
 } from "@/lib/whatsapp-config";
+import { listarWebhooks } from "@/lib/webhooks-out";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +155,57 @@ async function escolherNumero(formData: FormData): Promise<void> {
   revalidatePath("/admin");
 }
 
+/**
+ * Cria a chave e guarda o valor em claro para exibição única.
+ *
+ * O valor não volta pela URL de propósito: ficaria no histórico do navegador
+ * e nos logs de acesso do servidor, que é exatamente onde uma credencial não
+ * pode estar.
+ */
+async function novaChaveApi(formData: FormData): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  if (!nome) return;
+
+  try {
+    const { chave } = await criarChave(nome);
+    await writeSetting(SETTINGS_KEYS.apiKeyReveal, { nome, chave });
+  } catch (erro) {
+    console.error("[admin] falha ao criar chave de API:", erro);
+  }
+
+  revalidatePath("/admin");
+}
+
+async function esconderChaveApi(): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  await deleteSetting(SETTINGS_KEYS.apiKeyReveal);
+  revalidatePath("/admin");
+}
+
+async function revogarChaveApi(formData: FormData): Promise<void> {
+  "use server";
+
+  if (!(await isAdmin())) return;
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  try {
+    await revogarChave(id);
+  } catch (erro) {
+    console.error("[admin] falha ao revogar chave:", erro);
+  }
+
+  revalidatePath("/admin");
+}
+
 async function adicionarMotorista(formData: FormData): Promise<void> {
   "use server";
 
@@ -218,12 +271,24 @@ export default async function Admin({
   }
 
   const params = await searchParams;
-  const [credenciais, metadata, pedidos, motoristas, pendente] = await Promise.all([
+  const [
+    credenciais,
+    metadata,
+    pedidos,
+    motoristas,
+    pendente,
+    chaves,
+    webhooks,
+    reveladaOuNao,
+  ] = await Promise.all([
     loadWhatsAppConfig(),
     loadTokenMetadata(),
     listOrders(),
     listDrivers(),
     readSetting<PendingConnection>(SETTINGS_KEYS.pendingConnection),
+    listarChaves().catch(() => []),
+    listarWebhooks().catch(() => []),
+    readSetting<{ nome: string; chave: string }>(SETTINGS_KEYS.apiKeyReveal),
   ]);
 
   const dias = diasRestantes(metadata);
@@ -346,6 +411,132 @@ export default async function Admin({
             </a>
           </div>
         </div>
+      )}
+
+      <h2>API</h2>
+      <p className="sub">
+        Chaves para outras plataformas usarem este WhatsApp. A documentação
+        dos endpoints está em <code>docs/API.md</code>.
+      </p>
+
+      {reveladaOuNao && (
+        <div className="card aviso ok">
+          <p style={{ marginTop: 0 }}>
+            Chave <strong>{reveladaOuNao.nome}</strong> criada. Copie agora —
+            ela não aparece de novo:
+          </p>
+          <p>
+            <code style={{ wordBreak: "break-all" }}>{reveladaOuNao.chave}</code>
+          </p>
+          <form action={esconderChaveApi}>
+            <button type="submit">Já copiei</button>
+          </form>
+        </div>
+      )}
+
+      <div className="card">
+        <form action={novaChaveApi} className="acoes" style={{ marginTop: 0 }}>
+          <input
+            type="text"
+            name="nome"
+            placeholder="Nome da integração (ex.: CRM barbearia)"
+            required
+            style={{ flex: 1 }}
+          />
+          <button type="submit">Criar chave</button>
+        </form>
+      </div>
+
+      {chaves.length === 0 ? (
+        <div className="card empty">Nenhuma chave criada ainda.</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Chave</th>
+                <th>Criada</th>
+                <th>Último uso</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {chaves.map((chave) => (
+                <tr key={chave.id}>
+                  <td>{chave.nome}</td>
+                  <td>
+                    <code>{chave.prefixo}…</code>
+                  </td>
+                  <td>{formatarData(chave.created_at)}</td>
+                  <td>
+                    {chave.last_used_at ? formatarData(chave.last_used_at) : "—"}
+                  </td>
+                  <td>
+                    <span className={chave.revoked_at ? "badge" : "badge urgente"}>
+                      {chave.revoked_at ? "Revogada" : "Ativa"}
+                    </span>
+                  </td>
+                  <td>
+                    {!chave.revoked_at && (
+                      <form action={revogarChaveApi}>
+                        <input type="hidden" name="id" value={chave.id} />
+                        <button type="submit" className="botao secundario">
+                          Revogar
+                        </button>
+                      </form>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {webhooks.length > 0 && (
+        <>
+          <h2>Webhooks de saída</h2>
+          <p className="sub">
+            Destinos que recebem os eventos. Cadastrados pela própria API, em{" "}
+            <code>POST /api/v1/webhooks</code>.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>URL</th>
+                  <th>Eventos</th>
+                  <th>Última entrega</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {webhooks.map((webhook) => (
+                  <tr key={webhook.id}>
+                    <td style={{ maxWidth: "22rem", wordBreak: "break-all" }}>
+                      {webhook.url}
+                    </td>
+                    <td>{webhook.eventos.join(", ")}</td>
+                    <td>
+                      {webhook.last_sent_at
+                        ? formatarData(webhook.last_sent_at)
+                        : "—"}
+                    </td>
+                    <td>
+                      {webhook.last_error ? (
+                        <span className="error">{webhook.last_error}</span>
+                      ) : (
+                        <span className="badge">ok</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <h2>Motoristas e entregadores</h2>

@@ -20,6 +20,7 @@ import {
   sendLocationRequest,
   sendText,
 } from "./whatsapp";
+import { emitirEvento } from "./webhooks-out";
 
 /**
  * Conversa nativa do WhatsApp: sem link, sem Flow, sem página externa.
@@ -108,6 +109,15 @@ async function processMessage(
     direction: "inbound",
     type: message.type,
     payload: message,
+  });
+
+  // Integrações externas ficam sabendo da mensagem no instante em que ela
+  // chega, sem precisar perguntar de tempos em tempos.
+  await emitirEvento("message.received", {
+    contact_id: contact.id,
+    wa_id: message.from,
+    profile_name: profileName ?? contact.profile_name,
+    message,
   });
 
   await avancarConversa(contact.id, message.from, message);
@@ -452,6 +462,11 @@ async function processarRespostaMotorista(from: string, buttonId: string): Promi
       [{ id: `concluir:${order.id}`, title: "Marcar concluído" }],
     );
 
+    await emitirEvento("order.assigned", {
+      order,
+      driver: { id: motorista.id, nome: motorista.nome, telefone: motorista.telefone },
+    });
+
     const clienteWaId = order.contacts?.wa_id;
     if (clienteWaId) {
       await sendText(
@@ -469,6 +484,11 @@ async function processarRespostaMotorista(from: string, buttonId: string): Promi
       await sendText(from, "Não encontrei esse pedido em aberto pra você.");
       return;
     }
+
+    await emitirEvento("order.completed", {
+      order,
+      driver: { id: motorista.id, nome: motorista.nome, telefone: motorista.telefone },
+    });
 
     await sendText(from, "Marcado como concluído. Obrigado!");
 
