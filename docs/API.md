@@ -4,6 +4,11 @@ Uma API REST sobre o número de WhatsApp conectado. Serve para outra
 plataforma — um CRM, um ERP, um site — enviar mensagens, ler conversas e
 receber eventos, sem lidar com a Meta diretamente.
 
+**Não há resposta automática de nenhum tipo.** Quando o cliente manda
+mensagem, o bicco só grava e dispara o evento `message.received` — quem
+decide o que (e se) responder é a plataforma que está do outro lado do
+webhook, chamando `POST /api/v1/messages` de volta quando quiser.
+
 Base: `https://SEU-APP.vercel.app/api/v1`
 
 ---
@@ -24,11 +29,9 @@ Escopos, atribuídos na criação:
 
 | Escopo | Permite |
 | --- | --- |
-| `messages:send` | Enviar mensagens |
-| `messages:read` | Ler histórico de conversa |
+| `messages:send` | Enviar mensagens e subir mídia |
+| `messages:read` | Ler histórico de conversa e baixar mídia |
 | `contacts:read` | Listar contatos |
-| `orders:read` | Ler pedidos |
-| `orders:write` | Alterar status de pedido |
 
 Erros vêm sempre na mesma forma, para o tratamento ser escrito uma vez só:
 
@@ -276,27 +279,12 @@ GET /api/v1/contacts?q=maria&limit=50&offset=0
 
 `q` casa com telefone ou nome de perfil.
 
-## Pedidos
-
-```
-GET    /api/v1/orders?status=pendente&limit=50&offset=0
-GET    /api/v1/orders/{id}
-PATCH  /api/v1/orders/{id}     { "status": "cancelado" }
-```
-
-Status válidos: `pendente`, `buscando_motorista`, `atribuido`, `a_caminho`,
-`concluido`, `cancelado`.
-
-O `PATCH` existe para o caso em que a operação acontece do lado de fora: um
-pedido cancelado no CRM precisa refletir aqui, senão o motorista continua com
-um trabalho que já não existe.
-
 ---
 
 ## Webhooks: receber eventos
 
-Enviar mensagem é metade do problema. Para saber que *chegou* uma, registre
-um destino:
+O bicco não responde nada sozinho — é assim que sua plataforma fica sabendo
+que uma mensagem chegou, para então decidir (e chamar a API) o que fazer:
 
 ```
 POST /api/v1/webhooks
@@ -311,10 +299,7 @@ A resposta traz um `secret` **que aparece uma única vez**:
 
 | Evento | Quando |
 | --- | --- |
-| `message.received` | Cliente mandou qualquer mensagem |
-| `order.created` | Pedido concluído na conversa |
-| `order.assigned` | Motorista aceitou |
-| `order.completed` | Motorista marcou como concluído |
+| `message.received` | O número recebeu qualquer mensagem (único evento hoje) |
 
 Cada entrega é um `POST` com o corpo:
 

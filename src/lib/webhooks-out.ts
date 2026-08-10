@@ -9,11 +9,7 @@ import { supabase } from "./supabase";
  * tempos. Com webhook o evento chega no instante em que acontece.
  */
 
-export type EventoApi =
-  | "message.received"
-  | "order.created"
-  | "order.assigned"
-  | "order.completed";
+export type EventoApi = "message.received";
 
 export interface WebhookEndpoint {
   id: string;

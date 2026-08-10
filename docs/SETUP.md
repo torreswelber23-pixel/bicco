@@ -121,20 +121,27 @@ webhook fica cadastrado mas nunca recebe nada.
 
 ## 5. Teste de ponta a ponta
 
-Mande qualquer mensagem para o número. O esperado:
+Primeiro, crie uma chave de API em `/admin` → **API** → *Criar chave* (copie
+o valor, ele só aparece uma vez).
 
-1. Chega uma lista pra escolher **Corrida** ou **Entrega**.
-2. Pergunta o nome (responda por texto).
-3. Pede pra compartilhar localização (toque no clipe ou no botão de anexo e
-   escolha "Localização") — uma ou duas vezes, dependendo do serviço.
-4. Se for entrega, pergunta o que vai ser entregue e o destinatário
-   (responda "pular" pra pular).
-5. Pergunta se é **Agora** ou **Agendar** (botões). Se agendar, mostra lista
-   de dia e depois de horário.
-6. Chega uma confirmação com protocolo no WhatsApp.
-7. O pedido aparece em `https://SEU-APP.vercel.app/admin`.
-8. Se houver um motorista cadastrado e disponível (também em `/admin`), ele
-   recebe os botões **Aceitar** / **Recusar**.
+**Recebendo:** mande qualquer mensagem para o número pelo WhatsApp. O
+esperado:
+
+1. Ela aparece em **Contatos recentes**, em `/admin`.
+2. Se você tiver um webhook cadastrado (`POST /api/v1/webhooks`), o evento
+   `message.received` chega lá, assinado em `X-Bicco-Signature`.
+3. **Nenhuma resposta automática é enviada** — isso é esperado, não bug.
+
+**Enviando:** chame a API de volta.
+
+```bash
+curl https://SEU-APP.vercel.app/api/v1/messages \
+  -H "Authorization: Bearer SUA_CHAVE" \
+  -H "Content-Type: application/json" \
+  -d '{ "to": "SEU_NUMERO_E164", "type": "text", "text": "Funcionando!" }'
+```
+
+A mensagem deve chegar no WhatsApp de quem você mandou.
 
 ### Quando não funciona
 
@@ -142,24 +149,26 @@ Mande qualquer mensagem para o número. O esperado:
 | --- | --- |
 | Webhook não verifica | `WHATSAPP_VERIFY_TOKEN` diferente do painel |
 | Nenhuma mensagem chega | Campo `messages` não assinado em Webhook fields |
-| 401 no webhook | `WHATSAPP_APP_SECRET` errado |
-| Pede a mesma pergunta de novo, sem sair do lugar | Resposta não bateu com o passo esperado (ex.: mandou texto quando pedia localização) — confira os logs `[webhook]` |
-| "Nenhum motorista disponível" (nos logs) | Cadastre um motorista em `/admin` com o tipo certo, marcado como disponível |
+| 401 no webhook de entrada | `WHATSAPP_APP_SECRET` errado |
+| `401 invalid_key` na API | Chave errada, ou revogada em `/admin` |
+| `503 whatsapp_not_connected` | Nenhuma conta conectada em `/admin` |
+| Evento não chega no seu webhook | Confira `last_error` em `/admin`, e se o evento cadastrado inclui `message.received` |
 
 Os logs da Vercel (**Deployments → Runtime Logs**) mostram as mensagens de
-`[webhook]`, `[pedido]` e `[dispatch]`, que identificam quase todos os casos
+`[webhook]`, `[api]` e `[webhooks]`, que identificam quase todos os casos
 acima.
 
 ---
 
 ## 6. Antes de atender cliente de verdade
 
-- **Janela de 24h.** Fora dela você só pode iniciar conversa com *template*
-  aprovado. O fluxo aqui é sempre reativo (o cliente fala primeiro), então
-  funciona dentro da janela — mas retomar contato depois exige template.
+- **Janela de 24h.** Enviar pela API só funciona sem template dentro de 24h
+  desde a última mensagem *do cliente* — fora disso a Meta recusa com
+  `send_failed`, e a saída é um template aprovado.
 - **Limites de envio.** Começa em 250 conversas/dia e sobe conforme qualidade e
   verificação do negócio.
 - **Custo.** Conversas iniciadas pelo cliente têm cota gratuita mensal; acima
   disso são cobradas por conversa, com preço que varia por país.
-- **LGPD.** Você passa a guardar telefone, nome e os detalhes do pedido. Vale
-  ter uma política de privacidade acessível e um caminho para exclusão de dados.
+- **LGPD.** Você passa a guardar telefone, nome e o conteúdo das mensagens.
+  Vale ter uma política de privacidade acessível e um caminho para exclusão
+  de dados.

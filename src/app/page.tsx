@@ -1,33 +1,35 @@
 export default function Home() {
   return (
     <main>
-      <h1>Bicco · corrida e entrega sob demanda pelo WhatsApp</h1>
+      <h1>Bicco · API do WhatsApp Cloud API</h1>
       <p className="sub">
-        Quem manda mensagem responde uma conversa curta — lista pra escolher
-        corrida ou entrega, localização pra endereços — sem sair do WhatsApp.
-        O pedido é oferecido na hora aos motoristas e entregadores
-        disponíveis.
+        Uma API sobre um número de WhatsApp conectado. Sem resposta
+        automática: quando chega mensagem, ela só é gravada e disparada como
+        evento pra sua plataforma — quem decide o que responder é você, pela
+        API.
       </p>
 
       <h2>Endpoints</h2>
       <div className="card">
-        <strong>Webhook</strong>
+        <strong>Webhook (recebimento)</strong>
         <br />
-        <code>/api/whatsapp/webhook</code> — recebe as mensagens, conduz a
-        conversa do pedido e trata as respostas dos motoristas. Cadastre esta
-        URL em Configuration → Webhooks.
+        <code>/api/whatsapp/webhook</code> — recebe as mensagens da Meta,
+        grava e dispara o evento <code>message.received</code>. Cadastre esta
+        URL em Configuration → Webhooks, no app da Meta.
       </div>
       <div className="card">
         <strong>API</strong>
         <br />
-        <code>/api/v1</code> — enviar mensagens, ler conversas, consultar
-        pedidos e receber eventos por webhook, a partir de outra plataforma.
-        Autenticação por chave; referência em <code>docs/API.md</code>.
+        <code>/api/v1</code> — enviar qualquer tipo de mensagem (texto,
+        mídia, botões, lista, template...), ler conversas e assinar eventos
+        por webhook. Autenticação por chave; referência completa em{" "}
+        <code>docs/API.md</code>.
       </div>
       <div className="card">
         <strong>Painel</strong>
         <br />
-        <code>/admin</code> — pedidos, motoristas e chaves de API.
+        <code>/admin</code> — conexão com a Meta, chaves de API e webhooks
+        cadastrados.
       </div>
 
       <h2>Configuração</h2>

@@ -20,13 +20,7 @@ export interface ApiKey {
   revoked_at: string | null;
 }
 
-export const ESCOPOS_PADRAO = [
-  "messages:send",
-  "messages:read",
-  "contacts:read",
-  "orders:read",
-  "orders:write",
-];
+export const ESCOPOS_PADRAO = ["messages:send", "messages:read", "contacts:read"];
 
 const PREFIXO = "bic_live_";
 

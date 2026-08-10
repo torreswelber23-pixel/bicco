@@ -4,12 +4,7 @@ import { listarWebhooks, registrarWebhook } from "@/lib/webhooks-out";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const EVENTOS = [
-  "message.received",
-  "order.created",
-  "order.assigned",
-  "order.completed",
-];
+const EVENTOS = ["message.received"];
 
 export async function GET(request: Request): Promise<Response> {
   const auth = await autenticar(request);
