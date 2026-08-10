@@ -74,8 +74,14 @@ existe WhatsApp do outro lado. Nunca devolve o token.
 POST /api/v1/messages
 ```
 
-Quatro tipos, todos nativos e sem aprovação prévia da Meta. Template não
-entra aqui: exige cadastro e tem regra própria de janela.
+Cobre **todos** os tipos que a Cloud API aceita: texto, mídia, interativos,
+localização, contato, template e reação. Todo tipo aceita `"reply_to":
+"<wamid>"` opcional, para citar uma mensagem anterior.
+
+> **Não existe editar mensagem.** A Cloud API não oferece essa operação para
+> quem envia pela API — depois de enviada, uma mensagem só pode receber uma
+> reação ou ser seguida por uma mensagem nova. Não é limitação desta API, é
+> ausência no produto da Meta.
 
 **Texto**
 
@@ -83,7 +89,58 @@ entra aqui: exige cadastro e tem regra própria de janela.
 { "to": "5591920079468", "type": "text", "text": "Seu corte é amanhã às 14h." }
 ```
 
-**Botões** (1 a 3 — limite da Meta)
+**Imagem, vídeo, áudio, documento, figurinha** — mesmo formato para os cinco;
+`caption` só é aceito por imagem, vídeo e documento; `filename` só por
+documento. Use `link` (URL pública, a Meta busca sozinha) ou `media_id` (de
+um upload feito em `POST /api/v1/media`) — nunca os dois.
+
+```json
+{
+  "to": "5591920079468",
+  "type": "image",
+  "link": "https://exemplo.com/foto.jpg",
+  "caption": "Antes e depois"
+}
+```
+
+```json
+{ "to": "5591920079468", "type": "audio", "media_id": "1234567890" }
+```
+
+```json
+{
+  "to": "5591920079468",
+  "type": "document",
+  "link": "https://exemplo.com/orcamento.pdf",
+  "filename": "orcamento.pdf"
+}
+```
+
+**Localização** (enviar um pino — diferente de pedir a do cliente, veja
+`location_request` abaixo)
+
+```json
+{
+  "to": "5591920079468",
+  "type": "location",
+  "latitude": -1.4558,
+  "longitude": -48.4902,
+  "name": "Barbearia Central",
+  "address": "Av. Nazaré, 100"
+}
+```
+
+**Contato** (vCard simplificado)
+
+```json
+{
+  "to": "5591920079468",
+  "type": "contacts",
+  "contacts": [{ "name": "Suporte", "phone": "5591988887777" }]
+}
+```
+
+**Botões** (1 a 3 — limite da Meta, título ≤20 caracteres)
 
 ```json
 {
@@ -112,22 +169,91 @@ entra aqui: exige cadastro e tem regra própria de janela.
 }
 ```
 
-**Pedido de localização** — abre o seletor de mapa nativo
+**Pedido de localização** — abre o seletor de mapa nativo do cliente
 
 ```json
 { "to": "5591920079468", "type": "location_request", "body": "Envie seu endereço." }
 ```
 
-Resposta `201`:
+**Botão de link** (`cta_url`) — único botão, abre uma URL
 
 ```json
-{ "sent": true, "to": "5591920079468", "type": "text", "contact_id": "uuid" }
+{
+  "to": "5591920079468",
+  "type": "cta_url",
+  "body": "Confirme seu horário pelo link:",
+  "button_text": "Confirmar",
+  "url": "https://exemplo.com/confirmar/abc123"
+}
 ```
 
-> **Janela de 24 horas.** O WhatsApp só permite mensagem livre dentro de 24h
-> desde a última mensagem *do cliente*. Fora disso a Meta recusa com
-> `send_failed`, e o caminho é um template aprovado — regra dela, não desta
-> API.
+**Template** — só funciona com um nome já aprovado no WhatsApp Manager; é o
+único tipo que a Meta aceita fora da janela de 24h.
+
+```json
+{
+  "to": "5591920079468",
+  "type": "template",
+  "name": "lembrete_horario",
+  "language": "pt_BR",
+  "components": [
+    { "type": "body", "parameters": [{ "type": "text", "text": "14h" }] }
+  ]
+}
+```
+
+**Reação** — não devolve mensagem nova, reage a uma existente. `emoji: ""`
+remove uma reação enviada antes.
+
+```json
+{ "to": "5591920079468", "type": "reaction", "message_id": "wamid.HBg…", "emoji": "👍" }
+```
+
+Resposta `201` (comum a todos os tipos):
+
+```json
+{
+  "sent": true,
+  "to": "5591920079468",
+  "type": "text",
+  "wa_message_id": "wamid.HBg…",
+  "contact_id": "uuid"
+}
+```
+
+> **Janela de 24 horas.** O WhatsApp só permite mensagem livre (qualquer tipo
+> exceto template) dentro de 24h desde a última mensagem *do cliente*. Fora
+> disso a Meta recusa com `send_failed`, e o caminho é um template aprovado.
+
+---
+
+## Mídia: upload e download
+
+Enviar por `link` (URL pública) é o caminho simples e não passa por aqui.
+Use estes endpoints só quando o arquivo **não** tem URL pública.
+
+**Upload** — devolve um `media_id` para usar em `POST /api/v1/messages`.
+Válido por ~30 dias sem uso, ou até a mensagem que o usa ser apagada.
+
+```
+POST /api/v1/media
+{ "data": "<base64>", "mime_type": "image/jpeg", "filename": "foto.jpg" }
+```
+
+```json
+{ "id": "1234567890", "mime_type": "image/jpeg" }
+```
+
+**Download** — baixa os bytes de uma mídia enviada ou recebida (o `id` vem
+do payload de `message.received`, em `message.image.id` etc.).
+
+```
+GET /api/v1/media/{id}
+```
+
+Devolve os bytes crus com o `Content-Type` correto — não a URL da Meta, que
+expira em minutos e exige o mesmo Bearer token da conta. Por isso o proxy: o
+token nunca sai do servidor.
 
 ---
 
@@ -236,5 +362,8 @@ Nenhum deles é escolha desta API — todos vêm da Meta:
 
 - Botões: no máximo 3, título ≤20 caracteres.
 - Listas: no máximo 10 itens, título ≤24, descrição ≤72.
-- Janela de 24h para mensagem livre.
+- Imagem: até 5MB. Áudio: até 16MB. Vídeo e documento: até 100MB.
+- Áudio e figurinha não aceitam `caption`.
+- Janela de 24h para mensagem livre; fora dela só template aprovado.
+- Não existe editar mensagem enviada — só reagir ou mandar uma nova.
 - Limite diário de conversas iniciadas, que sobe com verificação do negócio.
