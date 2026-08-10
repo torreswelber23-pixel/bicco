@@ -191,7 +191,8 @@ um upload feito em `POST /api/v1/media`) — nunca os dois.
 ```
 
 **Template** — só funciona com um nome já aprovado no WhatsApp Manager; é o
-único tipo que a Meta aceita fora da janela de 24h.
+único tipo que a Meta aceita fora da janela de 24h. Para saber quais estão
+aprovados, veja [Templates aprovados](#templates-aprovados) abaixo.
 
 ```json
 {
@@ -257,6 +258,49 @@ GET /api/v1/media/{id}
 Devolve os bytes crus com o `Content-Type` correto — não a URL da Meta, que
 expira em minutos e exige o mesmo Bearer token da conta. Por isso o proxy: o
 token nunca sai do servidor.
+
+---
+
+## Templates aprovados
+
+```
+GET /api/v1/templates
+GET /api/v1/templates?status=APPROVED
+```
+
+A mesma lista do WhatsApp Manager — nome, idioma e status de cada template
+cadastrado na conta. Existe pra você saber o `name`/`language` exatos antes
+de montar um `POST /api/v1/messages` com `type: "template"`, sem precisar
+abrir o painel da Meta.
+
+```json
+{
+  "data": [
+    {
+      "id": "123456789",
+      "name": "lembrete_horario",
+      "status": "APPROVED",
+      "category": "UTILITY",
+      "language": "pt_BR",
+      "components": [
+        { "type": "BODY", "text": "Seu horário é às {{1}}." }
+      ]
+    },
+    {
+      "id": "987654321",
+      "name": "promocao_semana",
+      "status": "PENDING",
+      "category": "MARKETING",
+      "language": "pt_BR",
+      "components": [ /* ... */ ]
+    }
+  ]
+}
+```
+
+`status` pode ser `APPROVED`, `PENDING`, `REJECTED` ou `PAUSED` — **só
+`APPROVED` pode ser usado** em `POST /api/v1/messages`; os outros a Meta
+recusa. Filtre com `?status=APPROVED` pra listar só os prontos pra uso.
 
 ---
 

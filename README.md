@@ -32,6 +32,7 @@ POST   /api/v1/messages            enviar qualquer tipo de mensagem
 GET    /api/v1/messages            histórico de uma conversa
 POST   /api/v1/media               upload de mídia (base64 → media_id)
 GET    /api/v1/media/{id}          download de mídia
+GET    /api/v1/templates           templates cadastrados e status de aprovação
 GET    /api/v1/contacts            quem já falou com o número
 POST   /api/v1/webhooks            registrar destino de eventos
 GET    /api/v1/webhooks            listar webhooks

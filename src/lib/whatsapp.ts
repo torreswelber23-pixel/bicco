@@ -453,6 +453,53 @@ export async function sendTemplate(
   );
 }
 
+export interface TemplateAprovado {
+  id: string;
+  name: string;
+  /** APPROVED, PENDING, REJECTED ou PAUSED — só APPROVED pode ser enviado. */
+  status: string;
+  category: string;
+  language: string;
+  components: unknown[];
+}
+
+/**
+ * Lista os templates cadastrados na conta (WABA), com o status de aprovação
+ * de cada um. É a mesma lista que aparece no WhatsApp Manager — útil para
+ * quem vai montar `sendTemplate()` e precisa saber o `name`/`language`
+ * exatos de um template já aprovado, sem abrir o painel da Meta.
+ */
+export async function listTemplates(params?: {
+  status?: string;
+  limit?: number;
+}): Promise<TemplateAprovado[]> {
+  const config = await configOuErro();
+  if (!config.wabaId) {
+    throw new Error(
+      "Nenhum WABA ID associado à conexão. Reconecte pelo painel /admin.",
+    );
+  }
+
+  const versao = config.graphVersion ?? env.graphApiVersion;
+  const query = new URLSearchParams({
+    fields: "id,name,status,category,language,components",
+    limit: String(params?.limit ?? 100),
+  });
+  if (params?.status) query.set("status", params.status);
+
+  const resposta = await fetch(
+    `https://graph.facebook.com/${versao}/${config.wabaId}/message_templates?${query}`,
+    { headers: { Authorization: `Bearer ${config.accessToken}` } },
+  );
+
+  const payload = await resposta.json().catch(() => ({}));
+  if (!resposta.ok) {
+    throw new Error(`Graph API ${resposta.status}: ${JSON.stringify(payload)}`);
+  }
+
+  return ((payload as { data?: TemplateAprovado[] }).data ?? []);
+}
+
 // ----------------------------------------------------------------- reaction
 
 /**
